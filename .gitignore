@@ -1,4 +1,7 @@
 fs/config.py
+# Volcados del repositorio para documentación: pueden arrastrar secretos.
+digest.txt
+**/digest.txt
 __pycache__/
 .venv/
 .pytest_cache/
