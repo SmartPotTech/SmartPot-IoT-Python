@@ -1,6 +1,6 @@
-"""Cliente MQTT del dispositivo según el contrato v1 de SmartPot.
+"""Device MQTT client implementing the SmartPot v1 contract.
 
-Las funciones de formato no dependen del hardware y se prueban con CPython.
+Formatting functions are hardware-independent and tested under CPython.
 """
 
 import json
@@ -49,28 +49,28 @@ def ack_payload(command_id, executed, message):
 
 
 def ca_certificate(ca_data):
-    """La CA del broker en DER a partir del PEM de BROKER["CA_CRT"]; sin ella no se envía la clave.
+    """Decodes the broker CA in DER format from BROKER["CA_CRT"] PEM; without it the device key is never sent.
 
-    config.py lleva el texto PEM porque Wokwi no admite archivos .crt; mbedtls lee DER en cualquier compilación de
-    MicroPython, aunque no traiga soporte de PEM.
+    config.py stores PEM text because Wokwi does not support .crt files; mbedtls reads DER in any
+    MicroPython build even without PEM support.
     """
     import binascii
 
     begin, end = "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"
     if not isinstance(ca_data, str) or begin not in ca_data or end not in ca_data:
-        raise ValueError("config.py no trae la CA del broker: copia el bloque BROKER de la guía de conexión")
+        raise ValueError("config.py is missing the broker CA: copy the BROKER block from the connection guide")
     body = ca_data.split(begin, 1)[1].split(end, 1)[0]
     try:
         return binascii.a2b_base64("".join(body.split()))
     except ValueError:
-        raise ValueError("la CA de config.py está dañada: copia otra vez el bloque BROKER")
+        raise ValueError("the CA in config.py is corrupted: copy the BROKER block again")
 
 
 def tls_client(factory, client_id, host, options, ca_data):
-    """Cliente MQTT sobre TLS que verifica el certificado del broker con la CA y su nombre.
+    """Builds a TLS MQTT client that verifies the broker certificate against the CA and hostname.
 
-    umqtt.simple de MicroPython 1.22 recibe ssl=True y ssl_params; si recibe un SSLContext lo ignora y cifra sin
-    verificar. Desde 1.23 recibe el SSLContext y rechaza ssl_params, por eso se prueba primero la forma de 1.22.
+    umqtt.simple in MicroPython 1.22 takes ssl=True and ssl_params; if given an SSLContext it ignores it and encrypts
+    without verification. Since 1.23 it accepts an SSLContext and rejects ssl_params, so 1.22 form is tried first.
     """
     import ssl
 
@@ -86,12 +86,12 @@ def tls_client(factory, client_id, host, options, ca_data):
 
 
 def refusal(error):
-    """Por qué no se pudo conectar cuando no es un error de red: la clave o la verificación del broker."""
+    """Formats why the connection was refused when not a network error: device key or broker verification."""
     detail = str(error).strip()
     # umqtt.simple lanza MQTTException con el código del CONNACK; mbedtls, un error con el motivo de la verificación.
     if type(error).__name__ == "MQTTException":
-        return "el broker rechazó la clave del dispositivo (código {})".format(detail)
-    return "no se pudo verificar el broker ({}): revisa la CA de config.py y la hora".format(detail)
+        return "broker rejected the device key (code {})".format(detail)
+    return "could not verify the broker ({}): check the CA in config.py and the system clock".format(detail)
 
 
 class SmartPotClient:
@@ -121,7 +121,7 @@ class SmartPotClient:
             raise OSError(refusal(error))
         self.client.publish(self.topics["status"], b"online", retain=True, qos=1)
         self.client.subscribe(self.topics["commands"], qos=1)
-        print("MQTT conectado como", self.crop_id)
+        print("MQTT connected as", self.crop_id)
 
     def poll(self):
         self.client.check_msg()
@@ -140,18 +140,18 @@ class SmartPotClient:
             pass
 
     def close(self):
-        """Suelta el socket de una conexión caída antes de volver a conectar."""
+        """Releases the socket of a dropped connection before reconnecting."""
         sock = getattr(self.client, "sock", None)
         if sock is None:
             return
         try:
             sock.close()
         except OSError as error:
-            print("El socket ya estaba cerrado:", error)
+            print("Socket was already closed:", error)
 
     def _on_message(self, topic, message):
         command = parse_command(message)
         if command is None:
-            print("Comando ilegible descartado")
+            print("Unreadable command discarded")
             return
         self.on_command(command)

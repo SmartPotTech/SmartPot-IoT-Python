@@ -1,4 +1,4 @@
-"""Firmware de SmartPot para un cultivo real: ESP32 con MicroPython (Wokwi o placa física)."""
+"""SmartPot firmware for a real crop: ESP32 running MicroPython (Wokwi or physical board)."""
 
 import time
 
@@ -17,7 +17,7 @@ WIFI_WAIT_SECONDS = 30
 
 
 class Link:
-    """WiFi y hora del ESP32, para que Device sepa cuándo puede conectarse al broker."""
+    """ESP32 WiFi and clock wrapper so Device knows when it can connect to the broker."""
 
     def __init__(self):
         self.station = network.WLAN(network.STA_IF)
@@ -40,16 +40,16 @@ class Link:
 
 
 def connect_wifi(link, lcd):
-    """Primer intento al encender, con el giro en la pantalla; si no llega, el ciclo sigue midiendo y reintenta."""
-    lcd.show_message("Conectando WiFi", config.WIFI["ssid"])
+    """First attempt on boot with LCD spinner; if it times out, the loop continues measuring and retries."""
+    lcd.show_message("Connecting WiFi", config.WIFI["ssid"])
     link.reconnect_wifi()
     for _ in range(WIFI_WAIT_SECONDS * 4):
         if link.wifi_up():
-            print("WiFi conectado:", link.station.ifconfig()[0])
+            print("WiFi connected:", link.station.ifconfig()[0])
             return True
         lcd.show_spinner()
         time.sleep(0.25)
-    print("Sin WiFi: el dispositivo sigue midiendo y reintenta cada 30 s")
+    print("No WiFi: device continues measuring and retries every 30 s")
     return False
 
 
@@ -61,20 +61,20 @@ def read_sensors(atmosphere, analog):
 
 
 def build_client(settings, lcd, on_command):
-    """Sin una CA válida no se envía la clave: el dispositivo queda midiendo sin conexión."""
+    """Without a valid CA the device key is never sent: the device keeps measuring offline."""
     try:
         return SmartPotClient(settings["crop_id"], settings["device_key"], settings["host"], settings["port"],
                               settings["tls"], getattr(config, "BROKER", {}).get("CA_CRT"), on_command)
     except (ValueError, OSError) as error:
-        print("No se puede conectar con seguridad:", error)
-        lcd.show_message("Revisa la CA en", "config.py")
+        print("Cannot connect securely:", error)
+        lcd.show_message("Check CA in", "config.py")
         time.sleep(5)
         return None
 
 
 def main():
     lcd = LCDDisplay(scl_pin=16, sda_pin=17)
-    lcd.show_message("Bienvenido a", "SmartPot ESP32")
+    lcd.show_message("Welcome to", "SmartPot ESP32")
     time.sleep(2)
     atmosphere = AtmosphereSensor(15)
     analog = {
@@ -84,9 +84,9 @@ def main():
         "soilMoisture": SoilMoistureSensor(33),
     }
     bank = ActuatorBank({
-        "WATER_PUMP": Actuator("Bomba de agua", 19, feminine=True),
-        "UV_LIGHT": Actuator("Luz ultravioleta", 18, feminine=True),
-        "FAN": Actuator("Ventilador", 5),
+        "WATER_PUMP": Actuator("Water pump", 19),
+        "UV_LIGHT": Actuator("UV light", 18),
+        "FAN": Actuator("Fan", 5),
     })
 
     link = Link()
@@ -98,7 +98,7 @@ def main():
 
     def on_command(command):
         executed, message = bank.execute(command, time.time())
-        print("Comando", command["actuator"], command["action"], "->", message)
+        print("Command", command["actuator"], command["action"], "->", message)
         client.acknowledge(command["id"], executed, message)
 
     client = build_client(settings, lcd, on_command)
@@ -109,7 +109,7 @@ def main():
             device.step(time.time())
         except Exception as error:
             # Un error inesperado no debe dejar un actuador encendido sin control: el ciclo sigue.
-            print("Error en el ciclo:", error)
+            print("Loop error:", error)
         time.sleep(POLL_SECONDS)
 
 

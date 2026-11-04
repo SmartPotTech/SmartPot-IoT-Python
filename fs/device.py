@@ -1,7 +1,7 @@
-"""Ciclo del dispositivo: mide, muestra y apaga a tiempo siempre; publica y obedece solo con conexión al broker.
+"""Device loop: always measures, displays, and turns off timed actuators; publishes and obeys when connected.
 
-No depende del hardware: main.py le entrega los sensores, los actuadores, la pantalla, el cliente MQTT y el enlace
-(WiFi y hora), y llama a step() cada medio segundo.
+Hardware-independent: main.py supplies sensors, actuators, display, MQTT client, and link
+(WiFi and clock), and calls step() every half second.
 """
 
 RETRY_SECONDS = 10
@@ -49,7 +49,7 @@ class Device:
         try:
             self.client.connect()
         except OSError as error:
-            print("Sin conexión con el broker:", error)
+            print("No connection to broker:", error)
             self.client.close()
             return
         self.online = True
@@ -66,7 +66,7 @@ class Device:
                 self._lost(error, now)
 
     def _lost(self, error, now):
-        print("Conexión perdida:", error)
+        print("Connection lost:", error)
         self.online = False
         self.client.close()
         self.next_attempt = now + RETRY_SECONDS

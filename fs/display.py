@@ -12,7 +12,7 @@ ICONS = (
 
 
 class LCDDisplay:
-    """Pantalla LCD 20x4 por I2C. El controlador HD44780 no tiene tildes: los textos van sin ellas."""
+    """20x4 I2C LCD display. The HD44780 controller uses ASCII characters without accents."""
 
     def __init__(self, scl_pin, sda_pin, address=0x27, rows=4, cols=20, freq=400000):
         self.i2c = I2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=freq)
@@ -43,12 +43,12 @@ class LCDDisplay:
                 return " " * (width - 2) + "--"
             return ("{:" + str(width) + "." + str(decimals) + "f}").format(number)
 
-        pump = "B" if states.get("WATER_PUMP") else "-"
+        pump = "P" if states.get("WATER_PUMP") else "-"
         light = "L" if states.get("UV_LIGHT") else "-"
-        fan = "V" if states.get("FAN") else "-"
+        fan = "F" if states.get("FAN") else "-"
         self.lcd.clear()
         self.print("T {}C H {}%".format(value("temperature", 4, 1), value("humidity", 3)), 0)
         self.print(ONLINE if online else OFFLINE, 0, self.cols - 1)
-        self.print("Luz {} lux".format(value("brightness", 5)), 1)
-        self.print("Sust {}% pH {}".format(value("soilMoisture", 3), value("ph", 4, 1)), 2)
+        self.print("Light {} lux".format(value("brightness", 5)), 1)
+        self.print("Soil {}% pH {}".format(value("soilMoisture", 3), value("ph", 4, 1)), 2)
         self.print("TDS {}ppm [{}{}{}]".format(value("tds", 4), pump, light, fan), 3)

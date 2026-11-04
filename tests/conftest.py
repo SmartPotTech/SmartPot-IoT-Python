@@ -1,4 +1,4 @@
-"""Módulos de MicroPython simulados para probar el firmware con CPython."""
+"""Simulated MicroPython modules for testing the firmware under CPython."""
 
 import pathlib
 import sys
@@ -40,7 +40,7 @@ class FakeADC:
     def read_u16(self):
         value = FakeADC.readings.get(self.pin.number, 0)
         if value is None:
-            raise OSError("sin lectura")
+            raise OSError("no reading")
         return value
 
 
@@ -52,7 +52,7 @@ class FakeDHT22:
 
     def measure(self):
         if FakeDHT22.fail:
-            raise OSError("DHT22 no responde")
+            raise OSError("DHT22 not responding")
 
     def temperature(self):
         return 23.5
@@ -62,7 +62,7 @@ class FakeDHT22:
 
 
 class FakeMQTTClient:
-    """umqtt.simple de MicroPython 1.23 o posterior: ssl es un SSLContext y no existe ssl_params."""
+    """umqtt.simple for MicroPython 1.23 or newer: ssl is an SSLContext and ssl_params does not exist."""
 
     def __init__(self, client_id, server, port=0, user=None, password=None, keepalive=0, ssl=None):
         self.client_id = client_id
@@ -99,7 +99,7 @@ class FakeMQTTClient:
 
 
 class LegacyMQTTClient(FakeMQTTClient):
-    """umqtt.simple de MicroPython 1.22: ssl=True y los parámetros de ssl.wrap_socket en ssl_params."""
+    """umqtt.simple for MicroPython 1.22: ssl=True and ssl.wrap_socket parameters in ssl_params."""
 
     def __init__(self, client_id, server, port=0, user=None, password=None, keepalive=0, ssl=False, ssl_params=None):
         super().__init__(client_id, server, port, user, password, keepalive)
@@ -107,7 +107,7 @@ class LegacyMQTTClient(FakeMQTTClient):
 
 
 class FakeLcd:
-    """I2cLcd que guarda lo que se escribe en cada fila."""
+    """I2cLcd stub that records what is written to each row."""
 
     def __init__(self, i2c=None, address=0x27, rows=4, cols=20):
         self.rows = [" " * cols for _ in range(rows)]

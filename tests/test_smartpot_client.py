@@ -18,7 +18,7 @@ def example_config():
 
 
 def client(received=None, **overrides):
-    options = {"crop_id": CROP, "device_key": "clave", "host": "mqtt.smartpot.app", "port": 8883, "use_tls": False,
+    options = {"crop_id": CROP, "device_key": "secret-key", "host": "mqtt.smartpot.app", "port": 8883, "use_tls": False,
                "ca_data": "", "on_command": (received.append if received is not None else lambda c: None),
                "client_factory": FakeMQTTClient}
     options.update(overrides)
@@ -38,12 +38,12 @@ def test_telemetry_skips_missing_sensors_and_rounds():
 def test_commands_are_parsed_and_invalid_ones_ignored():
     command = parse_command(b'{"id": "c1", "actuator": "water_pump", "action": "activate", "durationSeconds": 15}')
     assert command == {"id": "c1", "actuator": "WATER_PUMP", "action": "ACTIVATE", "durationSeconds": 15}
-    assert parse_command(b"no es json") is None
+    assert parse_command(b"not json") is None
     assert parse_command(b'{"actuator": "FAN"}') is None
 
 
 def test_acknowledgement_payload():
-    assert json.loads(ack_payload("c1", False, "sin bomba")) == {"id": "c1", "status": "FAILED", "message": "sin bomba"}
+    assert json.loads(ack_payload("c1", False, "no pump")) == {"id": "c1", "status": "FAILED", "message": "no pump"}
 
 
 def test_connect_announces_status_with_last_will_and_subscribes():
@@ -64,7 +64,7 @@ def test_incoming_commands_reach_the_handler_and_can_be_acknowledged():
     smartpot.poll()
     assert received[0]["id"] == "c9"
 
-    smartpot.acknowledge("c9", True, "Ventilador encendido")
+    smartpot.acknowledge("c9", True, "Fan turned on")
     topic, message, _, qos = smartpot.client.published[-1]
     assert topic == f"smartpot/v1/{CROP}/commands/ack"
     assert json.loads(message)["status"] == "EXECUTED"
@@ -87,14 +87,14 @@ def test_micropython_1_22_receives_the_ca_through_ssl_params():
 
 
 def test_without_the_ca_the_device_key_is_never_sent():
-    for missing in ("", "<CA_DE_SMARTPOT>", None):
+    for missing in ("", "<SMARTPOT_CA>", None):
         with pytest.raises(ValueError, match="BROKER"):
             client(use_tls=True, ca_data=missing)
 
 
 def test_a_damaged_ca_stops_the_connection():
-    broken = "-----BEGIN CERTIFICATE-----\nno es base64\n-----END CERTIFICATE-----"
-    with pytest.raises(ValueError, match="dañada"):
+    broken = "-----BEGIN CERTIFICATE-----\nnot base64\n-----END CERTIFICATE-----"
+    with pytest.raises(ValueError, match="corrupted"):
         client(use_tls=True, ca_data=broken)
     not_a_certificate = "-----BEGIN CERTIFICATE-----\nbm8gZXMgdW4gY2VydGlmaWNhZG8=\n-----END CERTIFICATE-----"
     with pytest.raises(OSError):
@@ -106,7 +106,7 @@ def test_plain_mqtt_needs_no_ca():
 
 
 class MQTTException(Exception):
-    """La que lanza umqtt.simple cuando el broker rechaza el CONNECT."""
+    """Raised by umqtt.simple when the broker rejects CONNECT."""
 
 
 class RefusedMQTTClient(FakeMQTTClient):
@@ -121,11 +121,11 @@ class UnverifiedMQTTClient(FakeMQTTClient):
 
 def test_a_refused_key_is_reported_as_a_connection_error():
     smartpot = client(client_factory=RefusedMQTTClient)
-    with pytest.raises(OSError, match=r"rechazó la clave del dispositivo \(código 5\)"):
+    with pytest.raises(OSError, match=r"rejected the device key \(code 5\)"):
         smartpot.connect()
 
 
 def test_a_broker_that_fails_verification_points_to_the_ca():
     smartpot = client(client_factory=UnverifiedMQTTClient)
-    with pytest.raises(OSError, match=r"\(The certificate is not correctly signed by the trusted CA\): revisa la CA"):
+    with pytest.raises(OSError, match=r"\(The certificate is not correctly signed by the trusted CA\): check the CA"):
         smartpot.connect()

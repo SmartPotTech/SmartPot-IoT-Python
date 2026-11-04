@@ -34,7 +34,7 @@ class FakeClient:
     def connect(self):
         self.connects += 1
         if self.fail_connect:
-            raise OSError("broker caído")
+            raise OSError("broker down")
 
     def poll(self):
         if self.poll_error:
@@ -56,7 +56,7 @@ class FakeScreen:
 
 
 def device(client=None, link=None, **options):
-    bank = ActuatorBank({"WATER_PUMP": Actuator("Bomba de agua", 19, feminine=True)})
+    bank = ActuatorBank({"WATER_PUMP": Actuator("Water pump", 19)})
     return Device(lambda: {"ph": 6.1}, bank, FakeScreen(), client, link or FakeLink(), 30, **options)
 
 
@@ -113,7 +113,7 @@ def test_a_lost_connection_is_retried_after_10_seconds():
     client = FakeClient()
     unit = device(client)
     unit.step(0)
-    client.poll_error = OSError("sin red")
+    client.poll_error = OSError("no network")
     unit.step(1)
     assert not unit.online and client.closed == 1
     client.poll_error = None

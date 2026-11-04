@@ -21,7 +21,7 @@ def test_readings_show_the_actuators_and_whether_the_device_is_online():
     lcd = LCDDisplay(scl_pin=16, sda_pin=17)
     lcd.show_readings(READINGS, {"WATER_PUMP": True, "UV_LIGHT": False, "FAN": True}, online=True)
     assert lcd.lcd.rows[0] == "T 23.5C H  61%     " + ONLINE
-    assert lcd.lcd.rows[3].startswith("TDS  790ppm [B-V]")
+    assert lcd.lcd.rows[3].startswith("TDS  790ppm [P-F]")
 
     lcd.show_readings({}, {}, online=False)
     assert lcd.lcd.rows[0] == "T   --C H  --%     " + OFFLINE

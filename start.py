@@ -1,4 +1,4 @@
-"""Ejecuta el firmware en la simulación de Wokwi (VS Code o wokwi-cli) montando la carpeta fs."""
+"""Runs the firmware in Wokwi simulation (VS Code or wokwi-cli) by mounting the fs directory."""
 
 import subprocess
 import sys
@@ -10,6 +10,6 @@ if __name__ == "__main__":
     try:
         subprocess.run(COMMAND, check=True)
     except subprocess.CalledProcessError as error:
-        sys.exit(f"El firmware terminó con error: {error}")
+        sys.exit(f"Firmware exited with error: {error}")
     except FileNotFoundError:
-        sys.exit("No se encontró mpremote: ejecuta «uv sync» antes de iniciar la simulación.")
+        sys.exit("mpremote not found: run 'uv sync' before starting the simulation.")

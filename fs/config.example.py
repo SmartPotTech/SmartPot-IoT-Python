@@ -10,8 +10,8 @@ WIFI = {
 }
 
 SMARTPOT = {
-    "crop_id": "<ID_DEL_CULTIVO>",
-    "device_key": "<CLAVE_DEL_DISPOSITIVO>",
+    "crop_id": "<CROP_ID>",
+    "device_key": "<DEVICE_KEY>",
     "host": "mqtt.smartpot.app",
     "port": 8883,
     "tls": True,

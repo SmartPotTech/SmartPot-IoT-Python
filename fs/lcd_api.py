@@ -11,36 +11,35 @@ class LcdApi:
     It is expected that a derived class will implement the hal_xxx functions.
     """
 
-    # The following constant names were lifted from the avrlib lcd.h
-    # header file, however, I changed the definitions from bit numbers
-    # to bit masks.
+    # Los siguientes nombres de constantes provienen del encabezado lcd.h de avrlib,
+    # adaptados de números de bit a máscaras de bit.
     #
-    # HD44780 LCD controller command set
+    # Conjunto de comandos del controlador LCD HD44780
 
-    LCD_CLR = 0x01  # DB0: clear display
-    LCD_HOME = 0x02  # DB1: return to home position
+    LCD_CLR = 0x01  # DB0: limpiar pantalla
+    LCD_HOME = 0x02  # DB1: volver a la posición inicial
 
-    LCD_ENTRY_MODE = 0x04  # DB2: set entry mode
-    LCD_ENTRY_INC = 0x02  # --DB1: increment
-    LCD_ENTRY_SHIFT = 0x01  # --DB0: shift
+    LCD_ENTRY_MODE = 0x04  # DB2: configurar modo de entrada
+    LCD_ENTRY_INC = 0x02  # --DB1: incrementar
+    LCD_ENTRY_SHIFT = 0x01  # --DB0: desplazar
 
-    LCD_ON_CTRL = 0x08  # DB3: turn lcd/cursor on
-    LCD_ON_DISPLAY = 0x04  # --DB2: turn display on
-    LCD_ON_CURSOR = 0x02  # --DB1: turn cursor on
-    LCD_ON_BLINK = 0x01  # --DB0: blinking cursor
+    LCD_ON_CTRL = 0x08  # DB3: encender pantalla/cursor
+    LCD_ON_DISPLAY = 0x04  # --DB2: encender pantalla
+    LCD_ON_CURSOR = 0x02  # --DB1: encender cursor
+    LCD_ON_BLINK = 0x01  # --DB0: cursor parpadeante
 
-    LCD_MOVE = 0x10  # DB4: move cursor/display
-    LCD_MOVE_DISP = 0x08  # --DB3: move display (0-> move cursor)
-    LCD_MOVE_RIGHT = 0x04  # --DB2: move right (0-> left)
+    LCD_MOVE = 0x10  # DB4: mover cursor/pantalla
+    LCD_MOVE_DISP = 0x08  # --DB3: mover pantalla (0-> mover cursor)
+    LCD_MOVE_RIGHT = 0x04  # --DB2: mover a la derecha (0-> izquierda)
 
-    LCD_FUNCTION = 0x20  # DB5: function set
-    LCD_FUNCTION_8BIT = 0x10  # --DB4: set 8BIT mode (0->4BIT mode)
-    LCD_FUNCTION_2LINES = 0x08  # --DB3: two lines (0->one line)
-    LCD_FUNCTION_10DOTS = 0x04  # --DB2: 5x10 font (0->5x7 font)
-    LCD_FUNCTION_RESET = 0x30  # See "Initializing by Instruction" section
+    LCD_FUNCTION = 0x20  # DB5: configuración de función
+    LCD_FUNCTION_8BIT = 0x10  # --DB4: modo de 8 bits (0-> modo de 4 bits)
+    LCD_FUNCTION_2LINES = 0x08  # --DB3: dos líneas (0-> una línea)
+    LCD_FUNCTION_10DOTS = 0x04  # --DB2: fuente 5x10 (0-> fuente 5x7)
+    LCD_FUNCTION_RESET = 0x30  # Ver sección "Initializing by Instruction"
 
-    LCD_CGRAM = 0x40  # DB6: set CG RAM address
-    LCD_DDRAM = 0x80  # DB7: set DD RAM address
+    LCD_CGRAM = 0x40  # DB6: establecer dirección CGRAM
+    LCD_DDRAM = 0x80  # DB7: establecer dirección DDRAM
 
     LCD_RS_CMD = 0
     LCD_RS_DATA = 1
@@ -128,8 +127,8 @@ class LcdApi:
         self.cursor_y = cursor_y
         addr = cursor_x & 0x3f
         if cursor_y & 1:
-            addr += 0x40  # Lines 1 & 3 add 0x40
-        if cursor_y & 2:  # Lines 2 & 3 add number of columns
+            addr += 0x40  # Las líneas 1 y 3 suman 0x40
+        if cursor_y & 2:  # Las líneas 2 y 3 suman el número de columnas
             addr += self.num_columns
         self.hal_write_command(self.LCD_DDRAM | addr)
 
@@ -139,8 +138,8 @@ class LcdApi:
         """
         if char == '\n':
             if self.implied_newline:
-                # self.implied_newline means we advanced due to a wraparound,
-                # so if we get a newline right after that we ignore it.
+                # self.implied_newline indica que avanzamos por salto automático de línea,
+                # por lo que si llega un salto explícito justo después se ignora.
                 self.implied_newline = False
             else:
                 self.cursor_x = self.num_columns
@@ -204,11 +203,10 @@ class LcdApi:
         """
         raise NotImplementedError
 
-    # This is a default implementation of hal_sleep_us which is suitable
-    # for most micropython implementations. For platforms which don't
-    # support `time.sleep_us()` they should provide their own implementation
-    # of hal_sleep_us in their hal layer and it will be used instead.
+    # Implementación por defecto de hal_sleep_us adecuada para la mayoría de compilaciones
+    # de MicroPython. En plataformas que no soporten time.sleep_us() se debe sobrescribir
+    # en la capa HAL correspondiente.
     def hal_sleep_us(self, usecs):
         """Sleep for some time (given in microseconds)."""
         time.sleep_us(
-            usecs)  # NOTE this is not part of Standard Python library, specific hal layers will need to override this
+            usecs)  # No forma parte de la biblioteca estándar de Python; las capas HAL específicas pueden sobrescribirlo

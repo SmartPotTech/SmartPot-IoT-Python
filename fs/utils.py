@@ -3,12 +3,12 @@ import time
 import ntptime
 
 LABELS = (
-    ("temperature", "Temperatura", "°C"),
-    ("humidity", "Humedad aire", "%"),
-    ("brightness", "Luz", "lux"),
+    ("temperature", "Temperature", "°C"),
+    ("humidity", "Air humidity", "%"),
+    ("brightness", "Light", "lux"),
     ("ph", "pH", ""),
     ("tds", "TDS", "ppm"),
-    ("soilMoisture", "Humedad sustr.", "%"),
+    ("soilMoisture", "Soil moisture", "%"),
 )
 # El ESP32 arranca en el año 2000: antes de sincronizar por NTP la hora no sirve para validar certificados.
 SYNCED_YEAR = 2025
@@ -19,21 +19,21 @@ def clock_ready(moment=None):
 
 
 def sync_time():
-    """Sincroniza el reloj por NTP; TLS necesita la hora correcta para validar el certificado."""
+    """Synchronizes the clock via NTP; TLS requires the current time to validate the broker certificate."""
     for _ in range(3):
         try:
             ntptime.settime()
-            print("Hora sincronizada:", time.localtime())
+            print("Clock synchronized:", time.localtime())
             return True
         except OSError as error:
-            print("No se pudo sincronizar la hora:", error)
+            print("Could not synchronize clock:", error)
             time.sleep(2)
     return False
 
 
 def timestamp(moment):
     if not clock_ready(moment):
-        return "hora sin sincronizar"
+        return "unsynchronized clock"
     return "{}-{:02d}-{:02d} {:02d}:{:02d}:{:02d} UTC".format(*moment[:6])
 
 
@@ -45,7 +45,7 @@ def format_row(label, value, unit):
 def print_table(readings, moment=None):
     line = "+" + "-" * 16 + "+" + "-" * 16 + "+"
     print(line)
-    print("| {:<31} |".format("Lectura " + timestamp(moment or time.gmtime())))
+    print("| {:<31} |".format("Reading " + timestamp(moment or time.gmtime())))
     print(line)
     for key, label, unit in LABELS:
         print(format_row(label, readings.get(key), unit))
