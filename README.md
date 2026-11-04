@@ -1,13 +1,157 @@
-# SmartPot-IoT
+# SmartPot-IoT-Python
 
-## Estado del Proyecto
+> **Language / Idioma:** [English](#english) | [Español](#español)
+
+---
+
+<a id="english"></a>
+
+## English
+
+### Project Status
 
 [![Firmware CI](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml)
 [![CodeQL Advanced](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml)
 
-## Descripción
+### Description
 
-SmartPot-IoT es el **firmware del dispositivo de un cultivo real**: MicroPython 1.24.1 sobre un ESP32 (funciona desde 1.22), simulado en [Wokwi](https://wokwi.com/projects/408863167711709185) o grabado en una placa física. Lee los sensores, muestra los valores en una pantalla LCD, publica la telemetría por **MQTT sobre TLS** y ejecuta los comandos que llegan desde SmartPot, confirmando cada uno. Si se cae la red, sigue midiendo, mostrando y apagando a tiempo lo que esté encendido.
+SmartPot-IoT-Python is the **MicroPython device firmware for a real crop**: MicroPython 1.24.1 on an ESP32 (supported since 1.22), simulated in [Wokwi](https://wokwi.com/projects/408863167711709185) or flashed onto a physical board. It reads sensors, displays values on an LCD screen, publishes telemetry over **MQTT over TLS**, and executes commands arriving from SmartPot while acknowledging each one. If the network drops, it continues measuring, displaying, and turning off active actuators on schedule.
+
+With a physical board or Wokwi, the crop is **real** to SmartPot: its readings come from this firmware and train continuous learning. No hardware or Wokwi open? Create a **virtual crop** in the PWA—it is simulated by [SmartPot-DataGenerator](https://github.com/SmartPotTech/SmartPot-DataGenerator) using the same contract and cannot be converted into a real crop later.
+
+```mermaid
+flowchart LR
+  sensors["DHT22 · light · pH<br/>TDS · substrate"] --> esp["ESP32<br/>MicroPython"]
+  esp --> lcd["20x4 LCD<br/>readings & connection"]
+  esp -->|"telemetry · status · ack"| broker["mqtt.smartpot.app:8883<br/>TLS"]
+  broker -->|"commands"| esp
+  esp --> act["Pump · UV light · Fan"]
+```
+
+### Circuit
+
+| Component | ESP32 Pin | Reported Scale |
+| --- | --- | --- |
+| DHT22 (air temperature and humidity) | GPIO 15 | °C and % |
+| Light sensor (potentiometer in Wokwi) | GPIO 34 | 0–2000 lux |
+| pH sensor | GPIO 35 | 0–14 |
+| TDS sensor | GPIO 32 | 0–3000 ppm |
+| Substrate moisture | GPIO 33 | 0–100 % |
+| Water pump (blue LED) | GPIO 19 | `WATER_PUMP` |
+| UV light (purple LED) | GPIO 18 | `UV_LIGHT` |
+| Fan (orange LED) | GPIO 5 | `FAN` |
+| 20x4 I2C LCD | SCL 16 · SDA 17 | — |
+
+### Project Structure
+
+```text
+SmartPot-IoT/
+├── fs/                      # ESP32 filesystem
+│   ├── main.py              # Boot: welcome screen, WiFi, NTP clock, and device loop
+│   ├── device.py            # Loop: measures and turns off on schedule; publishes and obeys when online
+│   ├── smartpot_client.py   # MQTT v1 contract and TLS verified with the CA in config.py
+│   ├── sensors.py           # Analog sensors and DHT22
+│   ├── actuators.py         # Actuators with timed automatic shutoff
+│   ├── display.py           # LCD display: readings, actuators, and connection state
+│   ├── utils.py             # NTP clock sync and console table with reading timestamp
+│   ├── config.example.py    # Template for config.py (untracked) with embedded broker CA
+│   └── i2c_lcd.py, lcd_api.py
+├── tests/                   # CPython tests with simulated MicroPython modules
+├── diagram.json             # Wokwi circuit with MicroPython 1.24.1
+├── wokwi.toml               # Local simulation with ESP32_GENERIC-20241129-v1.24.1.bin
+├── start.py                 # Runs the firmware in local simulation via mpremote
+└── pyproject.toml / uv.lock # Development tooling (mpremote, pytest, ruff)
+```
+
+### MQTT Contract
+
+The device connects to `mqtt.smartpot.app:8883` over TLS (1.2 or newer), verifies the broker certificate with SmartPot's public CA, and authenticates with **username = crop ID** and **password = device key**. The client ID is `smartpot-<cropId>` (the broker rejects empty IDs).
+
+| Topic | Direction | Example |
+| --- | --- | --- |
+| `smartpot/v1/{cropId}/telemetry` | Publishes every 30 s | `{"temperature":23.5,"humidity":61,"brightness":820,"ph":6.12,"tds":790,"soilMoisture":64.2}` |
+| `smartpot/v1/{cropId}/commands` | Subscribes (QoS 1) | `{"id":"…","actuator":"WATER_PUMP","action":"ACTIVATE","durationSeconds":15}` |
+| `smartpot/v1/{cropId}/commands/ack` | Publishes (QoS 1) | `{"id":"…","status":"EXECUTED","message":"Water pump turned on for 15 s"}` |
+| `smartpot/v1/{cropId}/status` | Retained & Last Will | `online` / `offline` |
+
+With `durationSeconds`, the actuator turns off automatically once the timer expires; without it, it stays on until receiving `DEACTIVATE`.
+
+#### Broker CA in `config.py`
+
+Wokwi does not support `.crt` files, so the public CA is stored as PEM text inside `config.py` (`BROKER["CA_CRT"]`), the only device-specific file. The firmware:
+
+- converts it to DER, which mbedtls reads across all MicroPython builds;
+- passes it to `umqtt.simple` as expected by each version: `ssl_params` with `cadata` in MicroPython 1.22 and an `SSLContext` in 1.23+ (`umqtt.simple` in 1.22 ignores `SSLContext` and encrypts without verifying);
+- verifies the broker certificate and hostname after synchronizing the clock via NTP, because the ESP32 validates certificate expiration dates;
+- refuses to connect without a valid CA: it never sends the device key to an unverified broker.
+
+### Offline Operation
+
+The loop runs every half second with or without network: it turns off timed actuators on schedule, reads sensors every `interval_seconds`, and shows them on the LCD and in the console with the reading timestamp. When connected to the broker, it also publishes telemetry and handles commands. If the connection drops, it retries the broker every 10 s and WiFi every 30 s; the top-right corner of the LCD shows an antenna when online and an `X` when offline.
+
+### Installation Guide
+
+#### 1. Create the crop in SmartPot
+
+In [smartpot.app](https://smartpot.app), create a **real** crop and choose its vessel type (pot, NFT pipes, vertical tower, or floating raft). The application displays the device key **only once** along with the connection guide (physical ESP32 or Wokwi) and the ready-to-use `config.py` containing the WiFi network and crop ID; if you lose the key, generate a new one from the Device tab.
+
+#### 2. Configure the firmware
+
+```bash
+cp fs/config.example.py fs/config.py
+```
+
+Paste the `config.py` from the guide or fill in `WIFI`, `crop_id`, and `device_key` manually; the `BROKER` block already contains the broker CA. `config.py` is in `.gitignore`: never commit the device key to the repository or leave it visible in a public Wokwi project.
+
+#### 3a. Browser Simulation
+
+Open the Wokwi project, replace its files with those in `fs/` (including your `config.py` with the CA) and `diagram.json` (which uses MicroPython 1.24.1), and run. The `Wokwi-GUEST` network has Internet access. If your copy still uses MicroPython 1.22, the firmware also works and verifies the broker.
+
+#### 3b. Local Simulation (VS Code or wokwi-cli)
+
+```bash
+uv sync
+# start the Wokwi simulation in VS Code (uses wokwi.toml) and then:
+uv run python start.py
+```
+
+`start.py` mounts the `fs` folder onto the simulated ESP32 via `mpremote` and executes `main.py`.
+
+#### Tests
+
+```bash
+uv run ruff check .
+uv run pytest
+```
+
+Tests verify the MQTT contract, command and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
+
+### Documentation
+
+The firmware only speaks MQTT with the broker; everything else is decided by the platform. Component documentation is in [`docs/`](docs/SmartPot_IoT_Documentation.md) (also in [DOCX](docs/SmartPot_IoT_Documentation.docx) and [PDF](docs/SmartPot_IoT_Documentation.pdf)), with diagrams in [`docs/diagrams`](docs/diagrams). The [technical documentation](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Technical_Documentation.md) details the MQTT contract, TLS connection, and circuit:
+
+- [Complete operation](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_02_Operation_Sequence.svg)
+- [State machines](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_05_State_Machines.svg)
+- [Complete architecture](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_01_Architecture.svg)
+
+### License
+
+This project is licensed under the MIT License.
+
+---
+
+<a id="español"></a>
+
+## Español
+
+### Estado del Proyecto
+
+[![Firmware CI](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml)
+[![CodeQL Advanced](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml)
+
+### Descripción
+
+SmartPot-IoT-Python es el **firmware en MicroPython del dispositivo de un cultivo real**: MicroPython 1.24.1 sobre un ESP32 (funciona desde 1.22), simulado en [Wokwi](https://wokwi.com/projects/408863167711709185) o grabado en una placa física. Lee los sensores, muestra los valores en una pantalla LCD, publica la telemetría por **MQTT sobre TLS** y ejecuta los comandos que llegan desde SmartPot, confirmando cada uno. Si se cae la red, sigue midiendo, mostrando y apagando a tiempo lo que esté encendido.
 
 Con placa o en Wokwi, el cultivo es **real** para SmartPot: sus lecturas vienen de este firmware y entrenan el aprendizaje continuo. ¿Sin hardware ni Wokwi abierto? Crea en la PWA un **cultivo virtual**: lo simula [SmartPot-DataGenerator](https://github.com/SmartPotTech/SmartPot-DataGenerator) con el mismo contrato, y no se puede convertir en real después.
 
@@ -20,7 +164,7 @@ flowchart LR
   esp --> act["Bomba · Luz ultravioleta · Ventilador"]
 ```
 
-## Circuito
+### Circuito
 
 | Componente | Pin ESP32 | Escala enviada |
 | --- | --- | --- |
@@ -34,7 +178,7 @@ flowchart LR
 | Ventilador (LED naranja) | GPIO 5 | `FAN` |
 | LCD 20x4 I2C | SCL 16 · SDA 17 | — |
 
-## Estructura del Proyecto
+### Estructura del Proyecto
 
 ```text
 SmartPot-IoT/
@@ -55,7 +199,7 @@ SmartPot-IoT/
 └── pyproject.toml / uv.lock # Herramientas de desarrollo (mpremote, pytest, ruff)
 ```
 
-## Contrato MQTT
+### Contrato MQTT
 
 El dispositivo se conecta a `mqtt.smartpot.app:8883` con TLS (1.2 o superior), verifica el certificado del broker con la CA pública de SmartPot y se autentica con **usuario = id del cultivo** y la **clave del dispositivo**. El client id es `smartpot-<cropId>` (el broker rechaza ids vacíos).
 
@@ -63,12 +207,12 @@ El dispositivo se conecta a `mqtt.smartpot.app:8883` con TLS (1.2 o superior), v
 | --- | --- | --- |
 | `smartpot/v1/{cropId}/telemetry` | Publica cada 30 s | `{"temperature":23.5,"humidity":61,"brightness":820,"ph":6.12,"tds":790,"soilMoisture":64.2}` |
 | `smartpot/v1/{cropId}/commands` | Recibe (QoS 1) | `{"id":"…","actuator":"WATER_PUMP","action":"ACTIVATE","durationSeconds":15}` |
-| `smartpot/v1/{cropId}/commands/ack` | Publica (QoS 1) | `{"id":"…","status":"EXECUTED","message":"Bomba de agua encendida por 15 s"}` |
+| `smartpot/v1/{cropId}/commands/ack` | Publica (QoS 1) | `{"id":"…","status":"EXECUTED","message":"Water pump turned on for 15 s"}` |
 | `smartpot/v1/{cropId}/status` | Retenido y última voluntad | `online` / `offline` |
 
 Con `durationSeconds` el actuador se apaga solo al cumplirse el tiempo; sin él queda encendido hasta recibir `DEACTIVATE`.
 
-### La CA del broker en `config.py`
+#### La CA del broker en `config.py`
 
 Wokwi no admite archivos `.crt`, así que la CA pública viaja como texto en `config.py` (`BROKER["CA_CRT"]`), el único archivo propio de cada dispositivo. El firmware:
 
@@ -77,17 +221,17 @@ Wokwi no admite archivos `.crt`, así que la CA pública viaja como texto en `co
 - verifica el certificado y el nombre del broker, y antes sincroniza la hora por NTP, porque el ESP32 comprueba las fechas del certificado;
 - sin una CA válida no se conecta: nunca entrega la clave a un broker sin verificar.
 
-## Sin conexión
+### Sin conexión
 
 El ciclo corre cada medio segundo con o sin red: apaga a tiempo los actuadores, lee los sensores cada `interval_seconds` y los muestra en la LCD y en la consola, con la hora de la lectura. Con el broker conectado, además publica la telemetría y atiende los comandos. Si la conexión se cae, reintenta el broker cada 10 s y el WiFi cada 30 s; la esquina de la pantalla muestra una antena en línea y una equis sin conexión.
 
-## Guía de Instalación
+### Guía de Instalación
 
-### 1. Crear el cultivo en SmartPot
+#### 1. Crear el cultivo en SmartPot
 
 En [smartpot.app](https://smartpot.app) crea un cultivo **real** y elige su forma (maceta, tubos NFT, torre o balsa). La aplicación muestra **una sola vez** la clave del dispositivo junto con la guía de conexión (ESP32 físico o Wokwi) y el `config.py` listo, con la red WiFi y el id del cultivo; si pierdes la clave, genera una nueva desde la pestaña Dispositivo.
 
-### 2. Configurar el firmware
+#### 2. Configurar el firmware
 
 ```bash
 cp fs/config.example.py fs/config.py
@@ -95,11 +239,11 @@ cp fs/config.example.py fs/config.py
 
 Pega el `config.py` de la guía o completa a mano `WIFI`, `crop_id` y `device_key`; el bloque `BROKER` ya trae la CA del broker. `config.py` está en `.gitignore`: nunca subas la clave al repositorio ni la dejes visible en un proyecto público de Wokwi.
 
-### 3a. Simulación en el navegador
+#### 3a. Simulación en el navegador
 
 Abre el proyecto de Wokwi, reemplaza sus archivos por los de `fs/` (con tu `config.py`, que ya trae la CA) y por el `diagram.json`, que usa MicroPython 1.24.1, y ejecuta. La red `Wokwi-GUEST` tiene salida a Internet. Si tu copia sigue en MicroPython 1.22, el firmware también funciona y verifica el broker.
 
-### 3b. Simulación local (VS Code o wokwi-cli)
+#### 3b. Simulación local (VS Code o wokwi-cli)
 
 ```bash
 uv sync
@@ -109,23 +253,19 @@ uv run python start.py
 
 `start.py` monta la carpeta `fs` en el ESP32 simulado con `mpremote` y ejecuta `main.py`.
 
-### Pruebas
+#### Pruebas
 
 ```bash
 uv run ruff check .
 uv run pytest
 ```
 
-Prueban el contrato MQTT, el manejo de comandos y ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante. Además, el firmware se probó en MicroPython 1.22.0 y 1.24.1 reales contra un Mosquitto con TLS: conecta y obedece con la CA correcta, y rechaza una CA ajena, un nombre fuera del certificado y una clave equivocada.
+Prueban el contrato MQTT, el manejo de comandos y ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
 
-## Documentación
+### Documentación
 
-El firmware solo habla MQTT con el broker; todo lo demás lo decide la plataforma. Su documentación propia está en [`docs/`](docs/SmartPot_IoT_Documentation.md) (también en [DOCX](docs/SmartPot_IoT_Documentation.docx) y [PDF](docs/SmartPot_IoT_Documentation.pdf)), con sus diagramas en [`docs/diagrams`](docs/diagrams): el general del firmware y su circuito, el ciclo principal con y sin conexión y la atención de una orden. También explica qué se rescató de la versión anterior que corría en Wokwi. La [documentación técnica](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Technical_Documentation.md) detalla el contrato MQTT, la conexión con TLS y el circuito. Los diagramas generales muestran la plataforma completa en una sola imagen ampliable:
+El firmware solo habla MQTT con el broker; todo lo demás lo decide la plataforma. Su documentación propia está en [`docs/`](docs/SmartPot_IoT_Documentation.md) (también en [DOCX](docs/SmartPot_IoT_Documentation.docx) y [PDF](docs/SmartPot_IoT_Documentation.pdf)), con sus diagramas en [`docs/diagrams`](docs/diagrams). La [documentación técnica](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Technical_Documentation.md) detalla el contrato MQTT, la conexión con TLS y el circuito.
 
-- [Operación completa](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_02_Operation_Sequence.svg): la conexión del dispositivo, cada lectura, los comandos con su ACK y la desconexión
-- [Máquinas de estado](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_05_State_Machines.svg): los estados del dispositivo y su cuenta MQTT, y los de un comando
-- [Arquitectura completa](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_01_Architecture.svg): dónde encaja el dispositivo dentro de la plataforma
-
-## Licencia
+### Licencia
 
 Este proyecto está bajo la licencia MIT.
