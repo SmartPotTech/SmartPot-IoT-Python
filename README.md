@@ -10,12 +10,12 @@
 
 ### Project Status
 
-[![Firmware CI](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml)
-[![CodeQL Advanced](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml)
+[![Firmware CI](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/ci.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/ci.yml)
+[![CodeQL Advanced](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/codeql.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/codeql.yml)
 
 ### Description
 
-SmartPot-IoT-Python is the **MicroPython device firmware for a real crop**: MicroPython 1.24.1 on an ESP32 (supported since 1.22), simulated in [Wokwi](https://wokwi.com/projects/408863167711709185) or flashed onto a physical board. It reads sensors, displays values on an LCD screen, publishes telemetry over **MQTT over TLS**, and executes commands arriving from SmartPot while acknowledging each one. If the network drops, it continues measuring, displaying, and turning off active actuators on schedule.
+SmartPot-IoT-Python is the **MicroPython firmware companion for rapid prototyping and simulation**: MicroPython 1.24.1 on an ESP32 (supported since 1.22), simulated in [Wokwi](https://wokwi.com/projects/408863167711709185) or flashed onto a physical board. For production physical deployments, see the canonical [SmartPot-IoT](https://github.com/SmartPotTech/SmartPot-IoT) Rust `no_std` firmware. It reads sensors, displays values on an LCD screen, publishes telemetry over **MQTT over TLS**, and executes commands arriving from SmartPot while acknowledging each one. If the network drops, it continues measuring, displaying, and turning off active actuators on schedule.
 
 With a physical board or Wokwi, the crop is **real** to SmartPot: its readings come from this firmware and train continuous learning. No hardware or Wokwi open? Create a **virtual crop** in the PWA—it is simulated by [SmartPot-DataGenerator](https://github.com/SmartPotTech/SmartPot-DataGenerator) using the same contract and cannot be converted into a real crop later.
 
@@ -146,12 +146,12 @@ This project is licensed under the MIT License.
 
 ### Estado del Proyecto
 
-[![Firmware CI](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/ci.yml)
-[![CodeQL Advanced](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT/actions/workflows/codeql.yml)
+[![Firmware CI](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/ci.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/ci.yml)
+[![CodeQL Advanced](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/codeql.yml/badge.svg)](https://github.com/SmartPotTech/SmartPot-IoT-Python/actions/workflows/codeql.yml)
 
 ### Descripción
 
-SmartPot-IoT-Python es el **firmware en MicroPython del dispositivo de un cultivo real**: MicroPython 1.24.1 sobre un ESP32 (funciona desde 1.22), simulado en [Wokwi](https://wokwi.com/projects/408863167711709185) o grabado en una placa física. Lee los sensores, muestra los valores en una pantalla LCD, publica la telemetría por **MQTT sobre TLS** y ejecuta los comandos que llegan desde SmartPot, confirmando cada uno. Si se cae la red, sigue midiendo, mostrando y apagando a tiempo lo que esté encendido.
+SmartPot-IoT-Python es el **firmware compañero en MicroPython para prototipado rápido y simulación**: MicroPython 1.24.1 sobre un ESP32 (funciona desde 1.22), simulado en [Wokwi](https://wokwi.com/projects/408863167711709185) o grabado en una placa física. Para despliegues físicos en producción, consulta el firmware canónico en Rust `no_std` [SmartPot-IoT](https://github.com/SmartPotTech/SmartPot-IoT). Lee los sensores, muestra los valores en una pantalla LCD, publica la telemetría por **MQTT sobre TLS** y ejecuta los comandos que llegan desde SmartPot, confirmando cada uno. Si se cae la red, sigue midiendo, mostrando y apagando a tiempo lo que esté encendido.
 
 Con placa o en Wokwi, el cultivo es **real** para SmartPot: sus lecturas vienen de este firmware y entrenan el aprendizaje continuo. ¿Sin hardware ni Wokwi abierto? Crea en la PWA un **cultivo virtual**: lo simula [SmartPot-DataGenerator](https://github.com/SmartPotTech/SmartPot-DataGenerator) con el mismo contrato, y no se puede convertir en real después.
 
