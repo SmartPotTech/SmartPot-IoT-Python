@@ -9,7 +9,7 @@ flowchart TB
   tick --> online{"¿En línea con el broker?"}
   online -->|"Sí"| poll["Atiende los comandos<br/>y confirma cada uno"]
   online -->|"No"| retry{"¿Toca reintentar?<br/>broker 10 s · WiFi 30 s"}
-  retry -->|"Sí"| connect["WiFi · hora · CONNECT con TLS<br/>y la CA de config.py en DER"]
+  retry -->|"Sí"| connect["WiFi · hora · CONNECT con TLS<br/>y la CA de config.py en DER<br/>online · capabilities retenido · subscribe"]
   retry -->|"No"| due
   connect --> due
   poll --> due{"¿Toca leer?<br/>cada interval_seconds"}

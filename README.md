@@ -73,8 +73,11 @@ The device connects to `mqtt.smartpot.app:8883` over TLS (1.2 or newer), verifie
 | `smartpot/v1/{cropId}/commands` | Subscribes (QoS 1) | `{"id":"…","actuator":"WATER_PUMP","action":"ACTIVATE","durationSeconds":15}` |
 | `smartpot/v1/{cropId}/commands/ack` | Publishes (QoS 1) | `{"id":"…","status":"EXECUTED","message":"Water pump turned on for 15 s"}` |
 | `smartpot/v1/{cropId}/status` | Retained & Last Will | `online` / `offline` |
+| `smartpot/v1/{cropId}/capabilities` | Publishes after `online` (retained, QoS 1) | `{"schema":1,"device":{"firmware":"smartpot-iot-python/2.0.0","hardware":"esp32-devkit-c-v4","telemetry":{"formats":["json-v1"]}},"sensors":[…],"actuators":["WATER_PUMP","UV_LIGHT","FAN"]}` |
 
 With `durationSeconds`, the actuator turns off automatically once the timer expires; without it, it stays on until receiving `DEACTIVATE`.
+
+The device declares its six sensors and three actuators in `.../capabilities` after `status=online` and before subscribing to `commands`; the message is retained, uses schema 1, does not declare `atmosphere` or `compact-v2`, and stays under 2 KB. `brightness` and `tds` are published as JSON integers, never as `820.0` or `790.0`. Command validation is strict: `id` must be a non-empty string (null, booleans, numbers, lists and objects are rejected), `actuator` and `action` must be non-empty strings, and `durationSeconds` must be a non-negative integer or absent. Commands are deduplicated by `id` over the last 16, so a QoS 1 redelivery repeats the previous ACK without toggling the hardware again.
 
 #### Broker CA in `config.py`
 
@@ -124,7 +127,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-Tests verify the MQTT contract, command and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
+The suite contains 72 tests and verifies the MQTT contract, integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
 
 ### Documentation
 
@@ -209,8 +212,11 @@ El dispositivo se conecta a `mqtt.smartpot.app:8883` con TLS (1.2 o superior), v
 | `smartpot/v1/{cropId}/commands` | Recibe (QoS 1) | `{"id":"…","actuator":"WATER_PUMP","action":"ACTIVATE","durationSeconds":15}` |
 | `smartpot/v1/{cropId}/commands/ack` | Publica (QoS 1) | `{"id":"…","status":"EXECUTED","message":"Water pump turned on for 15 s"}` |
 | `smartpot/v1/{cropId}/status` | Retenido y última voluntad | `online` / `offline` |
+| `smartpot/v1/{cropId}/capabilities` | Publica tras `online` (retenido, QoS 1) | `{"schema":1,"device":{"firmware":"smartpot-iot-python/2.0.0","hardware":"esp32-devkit-c-v4","telemetry":{"formats":["json-v1"]}},"sensors":[…],"actuators":["WATER_PUMP","UV_LIGHT","FAN"]}` |
 
 Con `durationSeconds` el actuador se apaga solo al cumplirse el tiempo; sin él queda encendido hasta recibir `DEACTIVATE`.
+
+El dispositivo declara sus seis sensores y tres actuadores en `.../capabilities` después de `status=online` y antes de suscribirse a `commands`; el mensaje es retenido, usa el esquema 1, no declara `atmosphere` ni `compact-v2` y ocupa menos de 2 KB. `brightness` y `tds` se publican como enteros JSON, nunca como `820.0` o `790.0`. La validación de comandos es estricta: `id` debe ser una cadena no vacía (se rechazan null, booleanos, números, listas y objetos), `actuator` y `action` deben ser cadenas no vacías, y `durationSeconds` debe ser un entero no negativo o estar ausente. Los comandos se deduplican por `id` en los últimos 16, así que un reenvío QoS 1 repite el ACK anterior sin accionar el hardware otra vez.
 
 #### La CA del broker en `config.py`
 
@@ -260,7 +266,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-Prueban el contrato MQTT, el manejo de comandos y ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
+La suite contiene 72 pruebas y verifica el contrato MQTT, la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
 
 ### Documentación
 

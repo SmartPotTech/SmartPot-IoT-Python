@@ -7,8 +7,9 @@ sequenceDiagram
   participant K as ActuatorBank
   A->>B: commands {id, actuator, action, durationSeconds} (QoS 1)
   B->>C: mensaje en smartpot/v1/{cropId}/commands
-  C->>C: parse_command valida la carga
+  C->>C: parse_command valida id, actuator y action
   C->>K: execute(command, ahora)
+  Note over C,K: Deduplica los últimos 16 ids:<br/>un reenvío QoS 1 repite el ACK sin accionar el hardware
   alt Actuador instalado
     K->>K: enciende o apaga el pin
     K-->>C: EXECUTED · «Bomba de agua encendida por 15 s»
