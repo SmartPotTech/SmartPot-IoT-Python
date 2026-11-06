@@ -17,6 +17,7 @@ def topics(crop_id, prefix=TOPIC_PREFIX):
         "commands": base + "/commands",
         "ack": base + "/commands/ack",
         "status": base + "/status",
+        "capabilities": base + "/capabilities",
     }
 
 
@@ -24,9 +25,33 @@ def telemetry_payload(readings):
     data = {}
     for field in TELEMETRY_FIELDS:
         value = readings.get(field)
-        if value is not None:
-            data[field] = round(value, DECIMALS.get(field, 1))
+        if value is None:
+            continue
+        decimals = DECIMALS.get(field, 1)
+        # Con 0 decimales el campo debe ser un entero JSON: 813, no 813.0.
+        data[field] = int(round(value)) if decimals == 0 else round(value, decimals)
     return json.dumps(data)
+
+
+def capabilities_payload():
+    """Declara los sensores y actuadores que este firmware MicroPython tiene instalados."""
+    return json.dumps({
+        "schema": 1,
+        "device": {
+            "firmware": "smartpot-iot-python/2.0.0",
+            "hardware": "esp32-devkit-c-v4",
+            "telemetry": {"formats": ["json-v1"]},
+        },
+        "sensors": [
+            {"key": "temperature", "unit": "C", "resolution": 0.01, "range": [-20, 60]},
+            {"key": "humidity", "unit": "%", "resolution": 0.01, "range": [0, 100]},
+            {"key": "brightness", "unit": "lux", "resolution": 1, "range": [0, 2000]},
+            {"key": "ph", "unit": "pH", "resolution": 0.01, "range": [0, 14]},
+            {"key": "tds", "unit": "ppm", "resolution": 1, "range": [0, 3000]},
+            {"key": "soilMoisture", "unit": "%", "resolution": 0.01, "range": [0, 100]},
+        ],
+        "actuators": ["WATER_PUMP", "UV_LIGHT", "FAN"],
+    })
 
 
 def parse_command(payload):
@@ -34,11 +59,27 @@ def parse_command(payload):
         if isinstance(payload, (bytes, bytearray)):
             payload = payload.decode()
         command = json.loads(payload)
+        if not isinstance(command, dict):
+            return None
+        command_id = command.get("id")
+        # El id debe ser texto no vacío: None, booleanos, números, listas y diccionarios no valen.
+        if not isinstance(command_id, str) or not command_id.strip():
+            return None
+        actuator = command.get("actuator")
+        action = command.get("action")
+        if not isinstance(actuator, str) or not isinstance(action, str):
+            return None
+        if not actuator.strip() or not action.strip():
+            return None
+        duration = command.get("durationSeconds")
+        # Solo se admite None o un entero no negativo; bool es subclase de int y se excluye.
+        if duration is not None and (isinstance(duration, bool) or not isinstance(duration, int) or duration < 0):
+            return None
         return {
-            "id": str(command["id"]),
-            "actuator": str(command.get("actuator", "")).upper(),
-            "action": str(command.get("action", "")).upper(),
-            "durationSeconds": command.get("durationSeconds"),
+            "id": command_id,
+            "actuator": actuator.upper(),
+            "action": action.upper(),
+            "durationSeconds": duration,
         }
     except (ValueError, KeyError, TypeError):
         return None
@@ -95,10 +136,13 @@ def refusal(error):
 
 
 class SmartPotClient:
-    def __init__(self, crop_id, device_key, host, port, use_tls, ca_data, on_command, client_factory=None):
+    def __init__(self, crop_id, device_key, host, port, use_tls, ca_data, on_command, client_factory=None,
+                 capabilities=None):
         self.crop_id = crop_id
         self.topics = topics(crop_id)
         self.on_command = on_command
+        # Se codifica una sola vez; None mantiene la publicación de capacidades desactivada.
+        self.capabilities = capabilities.encode() if isinstance(capabilities, str) else capabilities
         if client_factory is None:
             from umqtt.simple import MQTTClient
 
@@ -120,6 +164,9 @@ class SmartPotClient:
         except Exception as error:
             raise OSError(refusal(error))
         self.client.publish(self.topics["status"], b"online", retain=True, qos=1)
+        if self.capabilities is not None:
+            # Retenido para que la API conozca el hardware antes de enviar comandos.
+            self.client.publish(self.topics["capabilities"], self.capabilities, retain=True, qos=1)
         self.client.subscribe(self.topics["commands"], qos=1)
         print("MQTT connected as", self.crop_id)
 

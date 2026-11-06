@@ -10,7 +10,7 @@ from actuators import Actuator, ActuatorBank
 from device import Device
 from display import LCDDisplay
 from sensors import AtmosphereSensor, LightSensor, PHSensor, SoilMoistureSensor, TDSSensor
-from smartpot_client import SmartPotClient
+from smartpot_client import SmartPotClient, capabilities_payload
 
 POLL_SECONDS = 0.5
 WIFI_WAIT_SECONDS = 30
@@ -64,7 +64,8 @@ def build_client(settings, lcd, on_command):
     """Without a valid CA the device key is never sent: the device keeps measuring offline."""
     try:
         return SmartPotClient(settings["crop_id"], settings["device_key"], settings["host"], settings["port"],
-                              settings["tls"], getattr(config, "BROKER", {}).get("CA_CRT"), on_command)
+                              settings["tls"], getattr(config, "BROKER", {}).get("CA_CRT"), on_command,
+                              capabilities=capabilities_payload())
     except (ValueError, OSError) as error:
         print("Cannot connect securely:", error)
         lcd.show_message("Check CA in", "config.py")

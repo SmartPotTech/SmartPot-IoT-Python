@@ -5,7 +5,14 @@ import ssl
 import pytest
 
 from conftest import FakeMQTTClient, LegacyMQTTClient
-from smartpot_client import SmartPotClient, ack_payload, parse_command, telemetry_payload, topics
+from smartpot_client import (
+    SmartPotClient,
+    ack_payload,
+    capabilities_payload,
+    parse_command,
+    telemetry_payload,
+    topics,
+)
 
 CROP = "66f5a1000000000000000101"
 EXAMPLE_CONFIG = pathlib.Path(__file__).resolve().parent.parent / "fs" / "config.example.py"
@@ -28,6 +35,7 @@ def client(received=None, **overrides):
 def test_topics_follow_the_v1_contract():
     assert topics(CROP)["telemetry"] == f"smartpot/v1/{CROP}/telemetry"
     assert topics(CROP)["ack"] == f"smartpot/v1/{CROP}/commands/ack"
+    assert topics(CROP)["capabilities"] == f"smartpot/v1/{CROP}/capabilities"
 
 
 def test_telemetry_skips_missing_sensors_and_rounds():
@@ -35,11 +43,75 @@ def test_telemetry_skips_missing_sensors_and_rounds():
     assert payload == {"temperature": 23.5, "ph": 6.12, "tds": 813}
 
 
+def test_whole_number_telemetry_fields_are_json_integers():
+    raw = telemetry_payload({"brightness": 1851.4, "tds": 812.7})
+    payload = json.loads(raw)
+    assert type(payload["brightness"]) is int
+    assert type(payload["tds"]) is int
+    assert payload == {"brightness": 1851, "tds": 813}
+    assert '"brightness": 1851' in raw and '"tds": 813' in raw
+    assert "1851.0" not in raw and "813.0" not in raw
+
+
 def test_commands_are_parsed_and_invalid_ones_ignored():
     command = parse_command(b'{"id": "c1", "actuator": "water_pump", "action": "activate", "durationSeconds": 15}')
     assert command == {"id": "c1", "actuator": "WATER_PUMP", "action": "ACTIVATE", "durationSeconds": 15}
     assert parse_command(b"not json") is None
     assert parse_command(b'{"actuator": "FAN"}') is None
+
+
+@pytest.mark.parametrize("command_id", [None, [], ["c1"], {}, {"value": "c1"}, True, False, 0, 7, "", "   "])
+def test_commands_with_an_invalid_id_are_rejected(command_id):
+    command = {"id": command_id, "actuator": "FAN", "action": "ACTIVATE"}
+    assert parse_command(json.dumps(command)) is None
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("actuator", None), ("actuator", 7), ("actuator", ["FAN"]), ("actuator", {"id": "FAN"}),
+    ("actuator", ""), ("actuator", "   "),
+    ("action", None), ("action", 7), ("action", ["ACTIVATE"]), ("action", {"id": "ACTIVATE"}),
+    ("action", ""), ("action", "   "),
+])
+def test_commands_with_an_invalid_actuator_or_action_are_rejected(field, value):
+    command = {"id": "c1", "actuator": "FAN", "action": "ACTIVATE"}
+    command[field] = value
+    assert parse_command(json.dumps(command)) is None
+
+
+@pytest.mark.parametrize("duration", [-1, 1.5, "15", True, False, [], {}])
+def test_commands_with_an_invalid_duration_are_rejected(duration):
+    command = {"id": "c1", "actuator": "FAN", "action": "ACTIVATE", "durationSeconds": duration}
+    assert parse_command(json.dumps(command)) is None
+
+
+def test_commands_accept_a_missing_zero_or_positive_duration():
+    base = {"id": "c1", "actuator": "FAN", "action": "ACTIVATE"}
+    assert parse_command(json.dumps(base))["durationSeconds"] is None
+    assert parse_command(json.dumps({**base, "durationSeconds": 0}))["durationSeconds"] == 0
+    assert parse_command(json.dumps({**base, "durationSeconds": 15}))["durationSeconds"] == 15
+
+
+def test_capabilities_payload_follows_the_audit_schema():
+    raw = capabilities_payload()
+    payload = json.loads(raw)
+    assert payload["schema"] == 1
+    assert payload["device"] == {
+        "firmware": "smartpot-iot-python/2.0.0",
+        "hardware": "esp32-devkit-c-v4",
+        "telemetry": {"formats": ["json-v1"]},
+    }
+    sensors = {sensor["key"]: sensor for sensor in payload["sensors"]}
+    assert set(sensors) == {"temperature", "humidity", "brightness", "ph", "tds", "soilMoisture"}
+    assert "atmosphere" not in sensors
+    assert sensors["temperature"]["range"] == [-20, 60]
+    assert sensors["humidity"]["range"] == [0, 100]
+    assert sensors["brightness"]["range"] == [0, 2000]
+    assert sensors["ph"]["range"] == [0, 14]
+    assert sensors["tds"]["range"] == [0, 3000]
+    assert sensors["soilMoisture"]["range"] == [0, 100]
+    assert payload["actuators"] == ["WATER_PUMP", "UV_LIGHT", "FAN"]
+    assert "compact-v2" not in payload["device"]["telemetry"]["formats"]
+    assert len(raw.encode()) < 2048
 
 
 def test_acknowledgement_payload():
@@ -55,6 +127,20 @@ def test_connect_announces_status_with_last_will_and_subscribes():
     assert mqtt.will == (f"smartpot/v1/{CROP}/status", b"offline", True, 1)
     assert (f"smartpot/v1/{CROP}/status", b"online", True, 1) in mqtt.published
     assert mqtt.subscriptions == [(f"smartpot/v1/{CROP}/commands", 1)]
+    assert mqtt.events == [("publish", f"smartpot/v1/{CROP}/status"),
+                           ("subscribe", f"smartpot/v1/{CROP}/commands")]
+
+
+def test_connect_publishes_retained_capabilities_before_subscribing():
+    capabilities = capabilities_payload()
+    smartpot = client(capabilities=capabilities)
+    assert smartpot.capabilities == capabilities.encode()
+    smartpot.connect()
+    mqtt = smartpot.client
+    assert mqtt.events == [("publish", f"smartpot/v1/{CROP}/status"),
+                           ("publish", f"smartpot/v1/{CROP}/capabilities"),
+                           ("subscribe", f"smartpot/v1/{CROP}/commands")]
+    assert mqtt.published[1] == (f"smartpot/v1/{CROP}/capabilities", capabilities.encode(), True, 1)
 
 
 def test_incoming_commands_reach_the_handler_and_can_be_acknowledged():

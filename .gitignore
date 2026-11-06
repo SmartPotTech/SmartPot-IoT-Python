@@ -5,6 +5,7 @@ digest.txt
 __pycache__/
 .venv/
 .pytest_cache/
+pytest-cache-files-*
 .ruff_cache/
 .idea
 .vscode

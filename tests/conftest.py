@@ -70,6 +70,7 @@ class FakeMQTTClient:
         self.options = {"port": port, "user": user, "password": password, "ssl": ssl}
         self.published = []
         self.subscriptions = []
+        self.events = []
         self.will = None
         self.callback = None
         self.pending = []
@@ -85,9 +86,11 @@ class FakeMQTTClient:
 
     def publish(self, topic, message, retain=False, qos=0):
         self.published.append((topic, message, retain, qos))
+        self.events.append(("publish", topic))
 
     def subscribe(self, topic, qos=0):
         self.subscriptions.append((topic, qos))
+        self.events.append(("subscribe", topic))
 
     def check_msg(self):
         while self.pending:

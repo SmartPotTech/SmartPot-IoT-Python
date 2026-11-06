@@ -1,5 +1,7 @@
 from machine import Pin
 
+COMMAND_CACHE_SIZE = 16
+
 
 def readable(seconds):
     """Formats a duration in human-readable form: 15 s, 10 min, 2 h."""
@@ -43,8 +45,23 @@ class ActuatorBank:
 
     def __init__(self, actuators):
         self.actuators = actuators
+        self._recent = []
 
     def execute(self, command, now):
+        command_id = command.get("id")
+        if command_id is not None:
+            for cached in self._recent:
+                if cached[0] == command_id:
+                    # Un reenvío QoS 1 no debe accionar el hardware dos veces: se repite el ACK anterior.
+                    return cached[1], cached[2]
+        result = self._apply(command, now)
+        if command_id is not None:
+            self._recent.append((command_id, result[0], result[1]))
+            if len(self._recent) > COMMAND_CACHE_SIZE:
+                self._recent.pop(0)
+        return result
+
+    def _apply(self, command, now):
         actuator = self.actuators.get(command["actuator"])
         if actuator is None:
             return False, "This device does not have " + command["actuator"]
