@@ -1,4 +1,5 @@
 fs/config.py
+fs/config.json
 # Volcados del repositorio para documentación: pueden arrastrar secretos.
 digest.txt
 **/digest.txt

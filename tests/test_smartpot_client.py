@@ -15,13 +15,13 @@ from smartpot_client import (
 )
 
 CROP = "66f5a1000000000000000101"
-EXAMPLE_CONFIG = pathlib.Path(__file__).resolve().parent.parent / "fs" / "config.example.py"
+EXAMPLE_CONFIG = pathlib.Path(__file__).resolve().parent.parent / "fs" / "config.example.json"
 
 
 def example_config():
-    settings = {}
-    exec(EXAMPLE_CONFIG.read_text(encoding="utf-8"), settings)
-    return settings
+    import settings
+
+    return settings.load(str(EXAMPLE_CONFIG))
 
 
 def client(received=None, **overrides):

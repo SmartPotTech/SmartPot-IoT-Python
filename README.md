@@ -49,12 +49,13 @@ SmartPot-IoT/
 ├── fs/                      # ESP32 filesystem
 │   ├── main.py              # Boot: welcome screen, WiFi, NTP clock, and device loop
 │   ├── device.py            # Loop: measures and turns off on schedule; publishes and obeys when online
-│   ├── smartpot_client.py   # MQTT v1 contract and TLS verified with the CA in config.py
+│   ├── smartpot_client.py   # MQTT v1 contract and TLS verified with the CA in config.json
 │   ├── sensors.py           # Analog sensors and DHT22
 │   ├── actuators.py         # Actuators with timed automatic shutoff
 │   ├── display.py           # LCD display: readings, actuators, and connection state
 │   ├── utils.py             # NTP clock sync and console table with reading timestamp
-│   ├── config.example.py    # Template for config.py (untracked) with embedded broker CA
+│   ├── settings.py          # Loads config.json (shared format with the Rust firmware; config.py as fallback)
+│   ├── config.example.json  # Template for config.json (untracked) with embedded broker CA
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # CPython tests with simulated MicroPython modules
 ├── diagram.json             # Wokwi circuit with MicroPython 1.24.1
@@ -79,9 +80,9 @@ With `durationSeconds`, the actuator turns off automatically once the timer expi
 
 The device declares its six sensors and three actuators in `.../capabilities` after `status=online` and before subscribing to `commands`; the message is retained, uses schema 1, does not declare `atmosphere` or `compact-v2`, and stays under 2 KB. `brightness` and `tds` are published as JSON integers, never as `820.0` or `790.0`. Command validation is strict: `id` must be a non-empty string (null, booleans, numbers, lists and objects are rejected), `actuator` and `action` must be non-empty strings, and `durationSeconds` must be a non-negative integer or absent. Commands are deduplicated by `id` over the last 16, so a QoS 1 redelivery repeats the previous ACK without toggling the hardware again.
 
-#### Broker CA in `config.py`
+#### Broker CA in `config.json`
 
-Wokwi does not support `.crt` files, so the public CA is stored as PEM text inside `config.py` (`BROKER["CA_CRT"]`), the only device-specific file. The firmware:
+Wokwi does not support `.crt` files, so the public CA is stored as PEM text inside `config.json` (`BROKER.CA_CRT`), the only device-specific file. The firmware:
 
 - converts it to DER, which mbedtls reads across all MicroPython builds;
 - passes it to `umqtt.simple` as expected by each version: `ssl_params` with `cadata` in MicroPython 1.22 and an `SSLContext` in 1.23+ (`umqtt.simple` in 1.22 ignores `SSLContext` and encrypts without verifying);
@@ -120,14 +121,14 @@ In [smartpot.app](https://smartpot.app), create a **real** crop and choose its v
 #### 2. Configure the firmware
 
 ```bash
-cp fs/config.example.py fs/config.py
+cp fs/config.example.json fs/config.json
 ```
 
-Paste the `config.py` from the guide or fill in `WIFI`, `crop_id`, and `device_key` manually; the `BROKER` block already contains the broker CA. `config.py` is in `.gitignore`: never commit the device key to the repository or leave it visible in a public Wokwi project.
+Fill in `WIFI`, `crop_id`, and `device_key` (the guide values) in `config.json`; the `BROKER` block already contains the broker CA. Both firmwares read the same `config.json` format, and an older `config.py` from the guide still works when no `config.json` exists. `config.json` is in `.gitignore`: never commit the device key to the repository or leave it visible in a public Wokwi project.
 
 #### 3a. Browser Simulation
 
-Open the Wokwi project, replace its files with those in `fs/` (including your `config.py` with the CA) and `diagram.json` (which uses MicroPython 1.24.1), and run. The `Wokwi-GUEST` network has Internet access. If your copy still uses MicroPython 1.22, the firmware also works and verifies the broker.
+Open the Wokwi project, replace its files with those in `fs/` (including your `config.json` with the CA) and `diagram.json` (which uses MicroPython 1.24.1), and run. The `Wokwi-GUEST` network has Internet access. If your copy still uses MicroPython 1.22, the firmware also works and verifies the broker.
 
 #### 3b. Local Simulation (VS Code or wokwi-cli)
 
@@ -208,12 +209,13 @@ SmartPot-IoT/
 ├── fs/                      # Sistema de archivos del ESP32
 │   ├── main.py              # Arranque: bienvenida, WiFi, hora y el ciclo del dispositivo
 │   ├── device.py            # Ciclo: mide y apaga a tiempo siempre; publica y obedece con conexión
-│   ├── smartpot_client.py   # Contrato MQTT v1 y TLS verificado con la CA de config.py
+│   ├── smartpot_client.py   # Contrato MQTT v1 y TLS verificado con la CA de config.json
 │   ├── sensors.py           # Sensores analógicos y DHT22
 │   ├── actuators.py         # Actuadores con apagado automático por duración
 │   ├── display.py           # Pantalla LCD: lecturas, actuadores y estado de la conexión
 │   ├── utils.py             # Hora por NTP y tabla por consola con la hora de cada lectura
-│   ├── config.example.py    # Plantilla de config.py (no se versiona) con la CA del broker en texto
+│   ├── settings.py          # Carga config.json (formato común con el firmware Rust; config.py como respaldo)
+│   ├── config.example.json  # Plantilla de config.json (no se versiona) con la CA del broker en texto
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # Pruebas con CPython y módulos de MicroPython simulados
 ├── diagram.json             # Circuito de Wokwi con MicroPython 1.24.1
@@ -238,9 +240,9 @@ Con `durationSeconds` el actuador se apaga solo al cumplirse el tiempo; sin él 
 
 El dispositivo declara sus seis sensores y tres actuadores en `.../capabilities` después de `status=online` y antes de suscribirse a `commands`; el mensaje es retenido, usa el esquema 1, no declara `atmosphere` ni `compact-v2` y ocupa menos de 2 KB. `brightness` y `tds` se publican como enteros JSON, nunca como `820.0` o `790.0`. La validación de comandos es estricta: `id` debe ser una cadena no vacía (se rechazan null, booleanos, números, listas y objetos), `actuator` y `action` deben ser cadenas no vacías, y `durationSeconds` debe ser un entero no negativo o estar ausente. Los comandos se deduplican por `id` en los últimos 16, así que un reenvío QoS 1 repite el ACK anterior sin accionar el hardware otra vez.
 
-#### La CA del broker en `config.py`
+#### La CA del broker en `config.json`
 
-Wokwi no admite archivos `.crt`, así que la CA pública viaja como texto en `config.py` (`BROKER["CA_CRT"]`), el único archivo propio de cada dispositivo. El firmware:
+Wokwi no admite archivos `.crt`, así que la CA pública viaja como texto en `config.json` (`BROKER.CA_CRT`), el único archivo propio de cada dispositivo. El firmware:
 
 - la convierte a DER, que mbedtls lee en cualquier compilación de MicroPython;
 - se la entrega a `umqtt.simple` como lo pide cada versión: `ssl_params` con `cadata` en MicroPython 1.22 y un `SSLContext` desde 1.23 (el `umqtt.simple` de 1.22 ignora el `SSLContext` y cifra sin verificar);
@@ -283,14 +285,14 @@ En [smartpot.app](https://smartpot.app) crea un cultivo **real** y elige su form
 #### 2. Configurar el firmware
 
 ```bash
-cp fs/config.example.py fs/config.py
+cp fs/config.example.json fs/config.json
 ```
 
-Pega el `config.py` de la guía o completa a mano `WIFI`, `crop_id` y `device_key`; el bloque `BROKER` ya trae la CA del broker. `config.py` está en `.gitignore`: nunca subas la clave al repositorio ni la dejes visible en un proyecto público de Wokwi.
+Completa en `config.json` `WIFI`, `crop_id` y `device_key` (los valores de la guía); el bloque `BROKER` ya trae la CA del broker. Ambos firmwares leen el mismo formato de `config.json`, y un `config.py` antiguo de la guía sigue funcionando si no existe `config.json`. `config.json` está en `.gitignore`: nunca subas la clave al repositorio ni la dejes visible en un proyecto público de Wokwi.
 
 #### 3a. Simulación en el navegador
 
-Abre el proyecto de Wokwi, reemplaza sus archivos por los de `fs/` (con tu `config.py`, que ya trae la CA) y por el `diagram.json`, que usa MicroPython 1.24.1, y ejecuta. La red `Wokwi-GUEST` tiene salida a Internet. Si tu copia sigue en MicroPython 1.22, el firmware también funciona y verifica el broker.
+Abre el proyecto de Wokwi, reemplaza sus archivos por los de `fs/` (con tu `config.json`, que ya trae la CA) y por el `diagram.json`, que usa MicroPython 1.24.1, y ejecuta. La red `Wokwi-GUEST` tiene salida a Internet. Si tu copia sigue en MicroPython 1.22, el firmware también funciona y verifica el broker.
 
 #### 3b. Simulación local (VS Code o wokwi-cli)
 

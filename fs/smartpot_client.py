@@ -112,19 +112,19 @@ def ack_payload(command_id, executed, message):
 def ca_certificate(ca_data):
     """Decodes the broker CA in DER format from BROKER["CA_CRT"] PEM; without it the device key is never sent.
 
-    config.py stores PEM text because Wokwi does not support .crt files; mbedtls reads DER in any
+    config.json stores PEM text because Wokwi does not support .crt files; mbedtls reads DER in any
     MicroPython build even without PEM support.
     """
     import binascii
 
     begin, end = "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"
     if not isinstance(ca_data, str) or begin not in ca_data or end not in ca_data:
-        raise ValueError("config.py is missing the broker CA: copy the BROKER block from the connection guide")
+        raise ValueError("config.json is missing the broker CA: copy the BROKER block from the connection guide")
     body = ca_data.split(begin, 1)[1].split(end, 1)[0]
     try:
         return binascii.a2b_base64("".join(body.split()))
     except ValueError:
-        raise ValueError("the CA in config.py is corrupted: copy the BROKER block again")
+        raise ValueError("the CA in config.json is corrupted: copy the BROKER block again")
 
 
 def tls_client(factory, client_id, host, options, ca_data):
@@ -152,7 +152,7 @@ def refusal(error):
     # umqtt.simple lanza MQTTException con el código del CONNACK; mbedtls, un error con el motivo de la verificación.
     if type(error).__name__ == "MQTTException":
         return "broker rejected the device key (code {})".format(detail)
-    return "could not verify the broker ({}): check the CA in config.py and the system clock".format(detail)
+    return "could not verify the broker ({}): check the CA in config.json and the system clock".format(detail)
 
 
 class TimeoutSocket:

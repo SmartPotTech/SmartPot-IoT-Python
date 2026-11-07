@@ -6,7 +6,7 @@ import time
 import machine
 import network
 
-import config
+import settings
 import utils
 from actuators import Actuator, ActuatorBank
 from device import Device
@@ -20,6 +20,10 @@ WIFI_WAIT_SECONDS = 30
 # Periodo del temporizador que revisa actuadores aunque el bucle esté bloqueado en la red.
 SAFETY_TICK_MS = 500
 
+# Configuración compartida con el firmware Rust (config.json; config.py como respaldo).
+CONFIG = settings.load()
+WIFI = CONFIG["WIFI"]
+
 
 class Link:
     """ESP32 WiFi and clock wrapper so Device knows when it can connect to the broker."""
@@ -32,7 +36,7 @@ class Link:
     def wifi_up(self):
         up = self.station.isconnected()
         if up and not self.was_up:
-            print("SMARTPOT-WIFI-UP ssid={}".format(config.WIFI["ssid"]))
+            print("SMARTPOT-WIFI-UP ssid={}".format(WIFI["ssid"]))
         self.was_up = up
         return up
 
@@ -41,7 +45,7 @@ class Link:
         if self.station.status() == network.STAT_CONNECTING:
             return
         try:
-            self.station.connect(config.WIFI["ssid"], config.WIFI["password"])
+            self.station.connect(WIFI["ssid"], WIFI["password"])
         except OSError as error:
             print("WiFi:", error)
 
@@ -54,7 +58,7 @@ class Link:
 
 def connect_wifi(link, lcd, watchdog):
     """First attempt on boot with LCD spinner; if it times out, the loop continues measuring and retries."""
-    lcd.show_message("Connecting WiFi", config.WIFI["ssid"])
+    lcd.show_message("Connecting WiFi", WIFI["ssid"])
     link.reconnect_wifi()
     for _ in range(WIFI_WAIT_SECONDS * 4):
         watchdog.feed()
@@ -78,11 +82,11 @@ def build_client(settings, lcd, on_command):
     """Without a valid CA the device key is never sent: the device keeps measuring offline."""
     try:
         return SmartPotClient(settings["crop_id"], settings["device_key"], settings["host"], settings["port"],
-                              settings["tls"], getattr(config, "BROKER", {}).get("CA_CRT"), on_command,
+                              settings["tls"], CONFIG["BROKER"].get("CA_CRT"), on_command,
                               capabilities=capabilities_payload())
     except (ValueError, OSError) as error:
         print("Cannot connect securely:", error)
-        lcd.show_message("Check CA in", "config.py")
+        lcd.show_message("Check CA in", "config.json")
         time.sleep(5)
         return None
 
@@ -102,7 +106,8 @@ def start_watchdog(settings):
 
 
 def main(bank):
-    settings = config.SMARTPOT
+    settings = CONFIG["SMARTPOT"]
+    utils.set_ntp_server(settings.get("ntp_server"))
     clock = utils.MonotonicClock()
     watchdog = start_watchdog(settings)
 
@@ -153,7 +158,7 @@ def main(bank):
 
 def run():
     # Lo primero es dejar todas las salidas en bajo, antes de la pantalla o la red.
-    active_low = config.SMARTPOT.get("active_low", False)
+    active_low = CONFIG["SMARTPOT"].get("active_low", False)
     # GPIO5 es un pin de strapping: emite una señal PWM al arrancar; en hardware conviene un pull-down en el relé.
     bank = ActuatorBank({
         "WATER_PUMP": Actuator("Water pump", 19, active_low=active_low),

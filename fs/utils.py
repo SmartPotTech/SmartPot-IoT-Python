@@ -19,6 +19,12 @@ def clock_ready(moment=None):
     return (moment or time.gmtime())[0] >= SYNCED_YEAR
 
 
+def set_ntp_server(host):
+    """Uses the NTP server of the configuration (`ntp_server`, pool.ntp.org by default)."""
+    if host:
+        ntptime.host = host
+
+
 def sync_time():
     """Synchronizes the clock via NTP; TLS requires the current time to validate the broker certificate."""
     for _ in range(3):
