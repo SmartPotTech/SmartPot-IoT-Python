@@ -87,3 +87,26 @@ def test_topics_follow_the_contract_shape():
         "status": "smartpot/v1/" + CROP + "/status",
         "capabilities": "smartpot/v1/" + CROP + "/capabilities",
     }
+
+
+def test_command_durations_follow_the_shared_contract():
+    from smartpot_client import validate_command
+
+    commands = CONTRACT["commands"]
+    for valid in commands["validDurations"]:
+        command = {"id": "d", "actuator": "FAN", "action": "ACTIVATE", "durationSeconds": valid}
+        assert validate_command(json.dumps(command))[0]["durationSeconds"] == valid
+    for invalid in commands["invalidDurations"]:
+        command = {"id": "d", "actuator": "FAN", "action": "ACTIVATE", "durationSeconds": invalid}
+        parsed, command_id, reason = validate_command(json.dumps(command))
+        assert parsed is None and command_id == "d"
+        assert reason == commands["invalidDurationMessage"], invalid
+
+
+def test_actuator_safety_policy_follows_the_shared_contract():
+    import actuators
+
+    policy = CONTRACT["commands"]["safety"]
+    assert policy["maxOnSeconds"] == actuators.MAX_DURATION_SECONDS
+    assert policy["offlineCutoffSeconds"] == actuators.OFFLINE_CUTOFF_SECONDS
+    assert set(actuators.CRITICAL_ACTUATORS) == set(policy["criticalActuators"])
