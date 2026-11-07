@@ -1,8 +1,8 @@
-"""Shared configuration loading: config.json first, the older config.py as a fallback."""
+"""Shared configuration loading from config.json."""
 
 import json
-import sys
-import types
+
+import pytest
 
 import settings
 
@@ -16,13 +16,9 @@ def test_config_json_is_loaded(tmp_path):
     assert loaded["BROKER"] == {}
 
 
-def test_the_older_config_py_still_works(tmp_path, monkeypatch):
-    legacy = types.ModuleType("config")
-    legacy.WIFI = {"ssid": "legacy", "password": ""}
-    legacy.SMARTPOT = {"crop_id": "old"}
-    monkeypatch.setitem(sys.modules, "config", legacy)
-    loaded = settings.load(str(tmp_path / "missing.json"))
-    assert loaded["WIFI"]["ssid"] == "legacy" and loaded["BROKER"] == {}
+def test_a_missing_config_json_explains_what_to_do(tmp_path):
+    with pytest.raises(OSError, match="config.example.json or the block from the SmartPot connection guide"):
+        settings.load(str(tmp_path / "config.json"))
 
 
 def test_the_example_has_every_shared_block():

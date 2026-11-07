@@ -54,7 +54,7 @@ SmartPot-IoT/
 │   ├── actuators.py         # Actuators with timed automatic shutoff
 │   ├── display.py           # LCD display: readings, actuators, and connection state
 │   ├── utils.py             # NTP clock sync and console table with reading timestamp
-│   ├── settings.py          # Loads config.json (shared format with the Rust firmware; config.py as fallback)
+│   ├── settings.py          # Loads config.json (shared format with the Rust firmware)
 │   ├── config.example.json  # Template for config.json (untracked) with embedded broker CA
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # CPython tests with simulated MicroPython modules
@@ -116,7 +116,7 @@ The loop runs every half second with or without network: it turns off timed actu
 
 #### 1. Create the crop in SmartPot
 
-In [smartpot.app](https://smartpot.app), create a **real** crop and choose its vessel type (pot, NFT pipes, vertical tower, or floating raft). The application displays the device key **only once** along with the connection guide (physical ESP32 or Wokwi) and the ready-to-use `config.py` containing the WiFi network and crop ID; if you lose the key, generate a new one from the Device tab.
+In [smartpot.app](https://smartpot.app), create a **real** crop and choose its vessel type (pot, NFT pipes, vertical tower, or floating raft). The application displays the device key **only once** along with the connection guide (physical ESP32 or Wokwi) and the ready-to-use `config.json` containing the WiFi network, the crop ID and the broker CA; if you lose the key, generate a new one from the Device tab.
 
 #### 2. Configure the firmware
 
@@ -124,7 +124,7 @@ In [smartpot.app](https://smartpot.app), create a **real** crop and choose its v
 cp fs/config.example.json fs/config.json
 ```
 
-Fill in `WIFI`, `crop_id`, and `device_key` (the guide values) in `config.json`; the `BROKER` block already contains the broker CA. Both firmwares read the same `config.json` format, and an older `config.py` from the guide still works when no `config.json` exists. `config.json` is in `.gitignore`: never commit the device key to the repository or leave it visible in a public Wokwi project.
+Fill in `WIFI`, `crop_id`, and `device_key` (the guide values) in `config.json`; the `BROKER` block already contains the broker CA. Both firmwares read the same `config.json` format, so you can paste the guide's block as is. `config.json` is in `.gitignore`: never commit the device key to the repository or leave it visible in a public Wokwi project.
 
 #### 3a. Browser Simulation
 
@@ -214,7 +214,7 @@ SmartPot-IoT/
 │   ├── actuators.py         # Actuadores con apagado automático por duración
 │   ├── display.py           # Pantalla LCD: lecturas, actuadores y estado de la conexión
 │   ├── utils.py             # Hora por NTP y tabla por consola con la hora de cada lectura
-│   ├── settings.py          # Carga config.json (formato común con el firmware Rust; config.py como respaldo)
+│   ├── settings.py          # Carga config.json (formato común con el firmware Rust)
 │   ├── config.example.json  # Plantilla de config.json (no se versiona) con la CA del broker en texto
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # Pruebas con CPython y módulos de MicroPython simulados
@@ -280,7 +280,7 @@ El ciclo corre cada medio segundo con o sin red: apaga a tiempo los actuadores, 
 
 #### 1. Crear el cultivo en SmartPot
 
-En [smartpot.app](https://smartpot.app) crea un cultivo **real** y elige su forma (maceta, tubos NFT, torre o balsa). La aplicación muestra **una sola vez** la clave del dispositivo junto con la guía de conexión (ESP32 físico o Wokwi) y el `config.py` listo, con la red WiFi y el id del cultivo; si pierdes la clave, genera una nueva desde la pestaña Dispositivo.
+En [smartpot.app](https://smartpot.app) crea un cultivo **real** y elige su forma (maceta, tubos NFT, torre o balsa). La aplicación muestra **una sola vez** la clave del dispositivo junto con la guía de conexión (ESP32 físico o Wokwi) y el `config.json` listo, con la red WiFi, el id del cultivo y la CA del broker; si pierdes la clave, genera una nueva desde la pestaña Dispositivo.
 
 #### 2. Configurar el firmware
 
@@ -288,7 +288,7 @@ En [smartpot.app](https://smartpot.app) crea un cultivo **real** y elige su form
 cp fs/config.example.json fs/config.json
 ```
 
-Completa en `config.json` `WIFI`, `crop_id` y `device_key` (los valores de la guía); el bloque `BROKER` ya trae la CA del broker. Ambos firmwares leen el mismo formato de `config.json`, y un `config.py` antiguo de la guía sigue funcionando si no existe `config.json`. `config.json` está en `.gitignore`: nunca subas la clave al repositorio ni la dejes visible en un proyecto público de Wokwi.
+Completa en `config.json` `WIFI`, `crop_id` y `device_key` (los valores de la guía); el bloque `BROKER` ya trae la CA del broker. Ambos firmwares leen el mismo formato de `config.json`, así que puedes pegar tal cual el bloque de la guía. `config.json` está en `.gitignore`: nunca subas la clave al repositorio ni la dejes visible en un proyecto público de Wokwi.
 
 #### 3a. Simulación en el navegador
 

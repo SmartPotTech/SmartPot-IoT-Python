@@ -20,7 +20,7 @@ WIFI_WAIT_SECONDS = 30
 # Periodo del temporizador que revisa actuadores aunque el bucle esté bloqueado en la red.
 SAFETY_TICK_MS = 500
 
-# Configuración compartida con el firmware Rust (config.json; config.py como respaldo).
+# Configuración compartida con el firmware Rust (config.json).
 CONFIG = settings.load()
 WIFI = CONFIG["WIFI"]
 

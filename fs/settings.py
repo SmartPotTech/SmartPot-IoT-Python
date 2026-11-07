@@ -1,8 +1,7 @@
 """Loads the device configuration shared with the Rust firmware.
 
 `config.json` has the same blocks and keys in both firmwares (WIFI, SMARTPOT and BROKER with the CA as PEM text);
-this firmware reads it at runtime and the Rust one at build time. Boards configured with the older `config.py`
-keep working: it is read when no `config.json` exists.
+this firmware reads it at runtime and the Rust one at build time. The SmartPot connection guide generates it.
 """
 
 import json
@@ -15,9 +14,9 @@ def load(path=CONFIG_FILE):
         with open(path) as handle:
             data = json.load(handle)
     except OSError:
-        # Formato anterior: módulo config.py con los mismos bloques.
-        import config
-
-        data = {"WIFI": config.WIFI, "SMARTPOT": config.SMARTPOT, "BROKER": getattr(config, "BROKER", {})}
+        # Sin config.json no hay red ni cultivo: se avisa en vez de arrancar a medias.
+        raise OSError(
+            "Missing " + path + ": copy config.example.json or the block from the SmartPot connection guide"
+        ) from None
     data.setdefault("BROKER", {})
     return data
