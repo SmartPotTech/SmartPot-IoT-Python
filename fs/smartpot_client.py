@@ -54,39 +54,55 @@ def capabilities_payload():
     })
 
 
-def parse_command(payload):
+# Rango de la API (`SmartPot-API`, validateDuration) y mensajes compartidos con el firmware Rust.
+MIN_DURATION_SECONDS = 1
+MAX_DURATION_SECONDS = 3600
+MALFORMED = "Invalid command: id, actuator and action are required"
+INVALID_DURATION = "durationSeconds must be an integer between 1 and 3600"
+ACK_QUEUE_SIZE = 16
+SOCKET_TIMEOUT_SECONDS = 15
+
+
+def validate_command(payload):
+    """Returns (command, command_id, reason): the command when valid, otherwise the id (if readable) and why.
+
+    A negative, zero, decimal or out-of-range duration is rejected instead of being read as "no duration".
+    """
     try:
         if isinstance(payload, (bytes, bytearray)):
             payload = payload.decode()
         command = json.loads(payload)
-        if not isinstance(command, dict):
-            return None
-        command_id = command.get("id")
-        # El id debe ser texto no vacío: None, booleanos, números, listas y diccionarios no valen.
-        if not isinstance(command_id, str) or not command_id.strip():
-            return None
-        actuator = command.get("actuator")
-        action = command.get("action")
-        if not isinstance(actuator, str) or not isinstance(action, str):
-            return None
-        if not actuator.strip() or not action.strip():
-            return None
-        duration = command.get("durationSeconds")
-        # Solo se admite None o un entero no negativo; bool es subclase de int y se excluye.
-        if duration is not None and (isinstance(duration, bool) or not isinstance(duration, int) or duration < 0):
-            return None
-        # `LIGHTS` es el alias heredado del contrato anterior; UV_LIGHT es el canónico.
-        canonical_actuator = actuator.strip().upper()
-        if canonical_actuator == "LIGHTS":
-            canonical_actuator = "UV_LIGHT"
-        return {
-            "id": command_id,
-            "actuator": canonical_actuator,
-            "action": action.upper(),
-            "durationSeconds": duration,
-        }
-    except (ValueError, KeyError, TypeError):
-        return None
+    except (ValueError, TypeError):
+        return None, None, MALFORMED
+    if not isinstance(command, dict):
+        return None, None, MALFORMED
+    command_id = command.get("id")
+    # El id debe ser texto no vacío: None, booleanos, números, listas y diccionarios no valen.
+    if not isinstance(command_id, str) or not command_id.strip():
+        return None, None, MALFORMED
+    actuator = command.get("actuator")
+    action = command.get("action")
+    if not isinstance(actuator, str) or not isinstance(action, str) or not actuator.strip() or not action.strip():
+        return None, command_id, MALFORMED
+    duration = command.get("durationSeconds")
+    # Solo se admite None o un entero entre 1 y 3600; bool es subclase de int y se excluye.
+    if duration is not None and (isinstance(duration, bool) or not isinstance(duration, int)
+                                 or not MIN_DURATION_SECONDS <= duration <= MAX_DURATION_SECONDS):
+        return None, command_id, INVALID_DURATION
+    # `LIGHTS` es el alias heredado del contrato anterior; UV_LIGHT es el canónico.
+    canonical_actuator = actuator.strip().upper()
+    if canonical_actuator == "LIGHTS":
+        canonical_actuator = "UV_LIGHT"
+    return {
+        "id": command_id,
+        "actuator": canonical_actuator,
+        "action": action.upper(),
+        "durationSeconds": duration,
+    }, command_id, None
+
+
+def parse_command(payload):
+    return validate_command(payload)[0]
 
 
 def ack_payload(command_id, executed, message):
@@ -139,6 +155,35 @@ def refusal(error):
     return "could not verify the broker ({}): check the CA in config.py and the system clock".format(detail)
 
 
+class TimeoutSocket:
+    """Socket wrapper that turns umqtt's blocking mode into a bounded timeout.
+
+    umqtt.simple switches the socket to blocking mode to read the rest of a packet and to wait for PUBACK; without
+    a timeout a half-open connection would block the device forever. Here "blocking" means "wait at most
+    `timeout` seconds", so a dead link raises OSError and the device reconnects.
+    """
+
+    def __init__(self, sock, timeout):
+        self._sock = sock
+        self._timeout = timeout
+        self._apply(timeout)
+
+    def _apply(self, value):
+        try:
+            self._sock.settimeout(value)
+        except (AttributeError, OSError):
+            self._sock.setblocking(value != 0)
+
+    def setblocking(self, flag):
+        self._apply(self._timeout if flag else 0)
+
+    def settimeout(self, value):
+        self._apply(value)
+
+    def __getattr__(self, name):
+        return getattr(self._sock, name)
+
+
 class SmartPotClient:
     def __init__(self, crop_id, device_key, host, port, use_tls, ca_data, on_command, client_factory=None,
                  capabilities=None):
@@ -158,6 +203,7 @@ class SmartPotClient:
         else:
             self.client = client_factory(client_id, host, **options)
         self.client.set_callback(self._on_message)
+        self.pending_acks = []
 
     def connect(self):
         self.client.set_last_will(self.topics["status"], b"offline", retain=True, qos=1)
@@ -172,16 +218,38 @@ class SmartPotClient:
             # Retenido para que la API conozca el hardware antes de enviar comandos.
             self.client.publish(self.topics["capabilities"], self.capabilities, retain=True, qos=1)
         self.client.subscribe(self.topics["commands"], qos=1)
+        sock = getattr(self.client, "sock", None)
+        if sock is not None and not isinstance(sock, TimeoutSocket):
+            self.client.sock = TimeoutSocket(sock, SOCKET_TIMEOUT_SECONDS)
         print("MQTT connected as", self.crop_id)
+        print("SMARTPOT-MQTT-UP crop={}".format(self.crop_id))
 
     def poll(self):
         self.client.check_msg()
+        self.flush_acks()
+
+    def ping(self):
+        """Sends PINGREQ so the broker keeps the session alive even without telemetry."""
+        self.client.ping()
 
     def publish_telemetry(self, readings):
         self.client.publish(self.topics["telemetry"], telemetry_payload(readings).encode())
 
     def acknowledge(self, command_id, executed, message):
-        self.client.publish(self.topics["ack"], ack_payload(command_id, executed, message).encode(), qos=1)
+        """Queues the ACK: it is published after check_msg returns, never inside the message callback.
+
+        Publishing with QoS 1 inside the callback waited for PUBACK in the middle of check_msg and blocked the
+        loop that turns timed actuators off.
+        """
+        print("SMARTPOT-ACK {} {} {}".format(command_id, "EXECUTED" if executed else "FAILED", message))
+        self.pending_acks.append(ack_payload(command_id, executed, message).encode())
+        if len(self.pending_acks) > ACK_QUEUE_SIZE:
+            self.pending_acks.pop(0)
+
+    def flush_acks(self):
+        while self.pending_acks:
+            self.client.publish(self.topics["ack"], self.pending_acks[0], qos=1)
+            self.pending_acks.pop(0)
 
     def disconnect(self):
         try:
@@ -201,8 +269,10 @@ class SmartPotClient:
             print("Socket was already closed:", error)
 
     def _on_message(self, topic, message):
-        command = parse_command(message)
+        command, command_id, reason = validate_command(message)
         if command is None:
-            print("Unreadable command discarded")
+            print("Unreadable command discarded:", reason)
+            if command_id is not None:
+                self.acknowledge(command_id, False, reason)
             return
         self.on_command(command)

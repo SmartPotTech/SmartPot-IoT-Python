@@ -78,17 +78,29 @@ def test_commands_with_an_invalid_actuator_or_action_are_rejected(field, value):
     assert parse_command(json.dumps(command)) is None
 
 
-@pytest.mark.parametrize("duration", [-1, 1.5, "15", True, False, [], {}])
+@pytest.mark.parametrize("duration", [-1, 0, 3601, 1.5, "15", True, False, [], {}])
 def test_commands_with_an_invalid_duration_are_rejected(duration):
     command = {"id": "c1", "actuator": "FAN", "action": "ACTIVATE", "durationSeconds": duration}
     assert parse_command(json.dumps(command)) is None
 
 
-def test_commands_accept_a_missing_zero_or_positive_duration():
+def test_commands_accept_a_missing_or_api_range_duration():
     base = {"id": "c1", "actuator": "FAN", "action": "ACTIVATE"}
     assert parse_command(json.dumps(base))["durationSeconds"] is None
-    assert parse_command(json.dumps({**base, "durationSeconds": 0}))["durationSeconds"] == 0
-    assert parse_command(json.dumps({**base, "durationSeconds": 15}))["durationSeconds"] == 15
+    assert parse_command(json.dumps({**base, "durationSeconds": None}))["durationSeconds"] is None
+    assert parse_command(json.dumps({**base, "durationSeconds": 1}))["durationSeconds"] == 1
+    assert parse_command(json.dumps({**base, "durationSeconds": 3600}))["durationSeconds"] == 3600
+
+
+def test_invalid_commands_with_an_id_get_a_failed_ack_with_the_reason():
+    smartpot = client([])
+    smartpot.client.pending.append(
+        (b"topic", b'{"id": "c7", "actuator": "WATER_PUMP", "action": "ACTIVATE", "durationSeconds": -5}'))
+    smartpot.poll()
+    topic, message, _, qos = smartpot.client.published[-1]
+    assert topic == f"smartpot/v1/{CROP}/commands/ack" and qos == 1
+    assert json.loads(message) == {"id": "c7", "status": "FAILED",
+                                   "message": "durationSeconds must be an integer between 1 and 3600"}
 
 
 def test_capabilities_payload_follows_the_audit_schema():
@@ -151,6 +163,9 @@ def test_incoming_commands_reach_the_handler_and_can_be_acknowledged():
     assert received[0]["id"] == "c9"
 
     smartpot.acknowledge("c9", True, "Fan turned on")
+    # El ACK se encola y sale al vaciar la cola, nunca dentro del callback de check_msg.
+    assert all(published[0] != f"smartpot/v1/{CROP}/commands/ack" for published in smartpot.client.published)
+    smartpot.flush_acks()
     topic, message, _, qos = smartpot.client.published[-1]
     assert topic == f"smartpot/v1/{CROP}/commands/ack"
     assert json.loads(message)["status"] == "EXECUTED"
