@@ -2,6 +2,12 @@ from machine import Pin
 
 COMMAND_CACHE_SIZE = 16
 
+# Política de seguridad compartida con el firmware Rust: la bomba y el
+# humidificador nunca quedan encendidos sin límite ni sin supervisión.
+MAX_DURATION_SECONDS = 3600
+OFFLINE_CUTOFF_SECONDS = 300
+CRITICAL_ACTUATORS = ("WATER_PUMP", "HUMIDIFIER")
+
 
 def readable(seconds):
     """Formats a duration in human-readable form: 15 s, 10 min, 2 h."""
@@ -19,33 +25,45 @@ class Actuator:
         self.name = name
         # Se conserva el parámetro opcional por compatibilidad con llamadas previas.
         self.feminine = feminine
+        # Clave del contrato (WATER_PUMP, ...); la asigna el banco de actuadores.
+        self.key = name
         self.pin = Pin(pin_num, Pin.OUT)
         self.active = False
         self.until = None
+        self.on_since = None
         self.pin.off()
 
     def turn_on(self, duration=None, now=0):
         self.pin.on()
         self.active = True
+        self.on_since = now
         self.until = now + duration if duration else None
+        print("SMARTPOT-ACT", self.key, "ON", "{}s".format(duration) if duration else "")
 
-    def turn_off(self):
+    def turn_off(self, reason="command"):
+        was_active = self.active
         self.pin.off()
         self.active = False
         self.until = None
+        self.on_since = None
+        if was_active:
+            print("SMARTPOT-ACT", self.key, "OFF", reason)
 
     def tick(self, now):
         if self.active and self.until is not None and now >= self.until:
-            self.turn_off()
+            self.turn_off("timer")
             print(self.name, "turned off after timer expired")
 
 
 class ActuatorBank:
     """Executes API commands on connected actuators."""
 
-    def __init__(self, actuators):
+    def __init__(self, actuators, offline_cutoff=OFFLINE_CUTOFF_SECONDS):
         self.actuators = actuators
+        self.offline_cutoff = offline_cutoff
         self._recent = []
+        for key, actuator in actuators.items():
+            actuator.key = key
 
     def execute(self, command, now):
         command_id = command.get("id")
@@ -67,17 +85,32 @@ class ActuatorBank:
             return False, "This device does not have " + command["actuator"]
         if command["action"] == "ACTIVATE":
             duration = command.get("durationSeconds")
+            capped = duration is None and command["actuator"] in CRITICAL_ACTUATORS
+            if capped:
+                duration = MAX_DURATION_SECONDS
             actuator.turn_on(duration, now)
             state = " turned on"
-            return True, actuator.name + (state + " for " + readable(duration) if duration else state)
+            message = actuator.name + (state + " for " + readable(duration) if duration else state)
+            return True, message + (" (safety limit)" if capped else "")
         if command["action"] == "DEACTIVATE":
             actuator.turn_off()
             return True, actuator.name + " turned off"
         return False, "Unknown action: " + command["action"]
 
-    def tick(self, now):
-        for actuator in self.actuators.values():
+    def tick(self, now, offline_since=None):
+        """Applies timers and, without a broker, the failsafe of critical actuators."""
+        for key, actuator in self.actuators.items():
             actuator.tick(now)
+            if offline_since is None or not actuator.active or key not in CRITICAL_ACTUATORS:
+                continue
+            # Se cuenta desde lo más reciente: el corte o el encendido.
+            since = max(offline_since, actuator.on_since or 0)
+            if now - since >= self.offline_cutoff:
+                actuator.turn_off("failsafe")
+
+    def all_off(self, reason="safety"):
+        for actuator in self.actuators.values():
+            actuator.turn_off(reason)
 
     def states(self):
         return {name: actuator.active for name, actuator in self.actuators.items()}

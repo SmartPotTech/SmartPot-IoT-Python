@@ -40,6 +40,9 @@ class FakeClient:
         if self.poll_error:
             raise self.poll_error
 
+    def ping(self):
+        self.pings = getattr(self, "pings", 0) + 1
+
     def publish_telemetry(self, readings):
         self.published.append(readings)
 

@@ -1,19 +1,24 @@
 """SmartPot firmware for a real crop: ESP32 running MicroPython (Wokwi or physical board)."""
 
+import sys
 import time
 
+import machine
 import network
 
 import config
 import utils
 from actuators import Actuator, ActuatorBank
 from device import Device
-from display import LCDDisplay
+from display import LCDDisplay, ResilientDisplay
 from sensors import AtmosphereSensor, LightSensor, PHSensor, SoilMoistureSensor, TDSSensor
 from smartpot_client import SmartPotClient, capabilities_payload
 
+FIRMWARE = "smartpot-iot-python/2.0.0"
 POLL_SECONDS = 0.5
 WIFI_WAIT_SECONDS = 30
+# Periodo del temporizador que revisa actuadores aunque el bucle esté bloqueado en la red.
+SAFETY_TICK_MS = 500
 
 
 class Link:
@@ -22,11 +27,19 @@ class Link:
     def __init__(self):
         self.station = network.WLAN(network.STA_IF)
         self.station.active(True)
+        self.was_up = False
 
     def wifi_up(self):
-        return self.station.isconnected()
+        up = self.station.isconnected()
+        if up and not self.was_up:
+            print("SMARTPOT-WIFI-UP ssid={}".format(config.WIFI["ssid"]))
+        self.was_up = up
+        return up
 
     def reconnect_wifi(self):
+        # Llamar a connect() con un intento en curso lo reinicia: solo se pide si la estación está libre.
+        if self.station.status() == network.STAT_CONNECTING:
+            return
         try:
             self.station.connect(config.WIFI["ssid"], config.WIFI["password"])
         except OSError as error:
@@ -39,11 +52,12 @@ class Link:
         return utils.sync_time()
 
 
-def connect_wifi(link, lcd):
+def connect_wifi(link, lcd, watchdog):
     """First attempt on boot with LCD spinner; if it times out, the loop continues measuring and retries."""
     lcd.show_message("Connecting WiFi", config.WIFI["ssid"])
     link.reconnect_wifi()
     for _ in range(WIFI_WAIT_SECONDS * 4):
+        watchdog.feed()
         if link.wifi_up():
             print("WiFi connected:", link.station.ifconfig()[0])
             return True
@@ -73,10 +87,27 @@ def build_client(settings, lcd, on_command):
         return None
 
 
-def main():
-    lcd = LCDDisplay(scl_pin=16, sda_pin=17)
+class NoWatchdog:
+    """Used when `watchdog_seconds` is 0 (for example, while debugging from the REPL)."""
+
+    def feed(self):
+        pass
+
+
+def start_watchdog(settings):
+    seconds = settings.get("watchdog_seconds", 30)
+    if not seconds:
+        return NoWatchdog()
+    return machine.WDT(timeout=int(seconds * 1000))
+
+
+def main(bank):
+    settings = config.SMARTPOT
+    clock = utils.MonotonicClock()
+    watchdog = start_watchdog(settings)
+
+    lcd = ResilientDisplay(lambda: LCDDisplay(scl_pin=16, sda_pin=17))
     lcd.show_message("Welcome to", "SmartPot ESP32")
-    time.sleep(2)
     atmosphere = AtmosphereSensor(15)
     analog = {
         "brightness": LightSensor(34),
@@ -84,34 +115,61 @@ def main():
         "tds": TDSSensor(32),
         "soilMoisture": SoilMoistureSensor(33),
     }
-    bank = ActuatorBank({
-        "WATER_PUMP": Actuator("Water pump", 19),
-        "UV_LIGHT": Actuator("UV light", 18),
-        "FAN": Actuator("Fan", 5),
-    })
 
     link = Link()
-    if connect_wifi(link, lcd):
+    if connect_wifi(link, lcd, watchdog):
+        watchdog.feed()
         utils.sync_time()
 
-    settings = config.SMARTPOT
     client = None
 
     def on_command(command):
-        executed, message = bank.execute(command, time.time())
+        executed, message = bank.execute(command, clock.now())
         print("Command", command["actuator"], command["action"], "->", message)
         client.acknowledge(command["id"], executed, message)
 
     client = build_client(settings, lcd, on_command)
     device = Device(lambda: read_sensors(atmosphere, analog), bank, lcd, client, link,
-                    settings.get("interval_seconds", 30), secure=settings["tls"], report=utils.print_table)
+                    settings.get("interval_seconds", 30), secure=settings["tls"], report=utils.print_table,
+                    reset=machine.reset, heap_report=lambda: utils.heap_report(settings.get("heap_min_free")))
+
+    # Los temporizadores y el failsafe también se revisan mientras el bucle espera a la red: MicroPython
+    # ejecuta este callback programado durante las llamadas bloqueantes de lwIP.
+    safety_clock = utils.MonotonicClock()
+    safety_timer = machine.Timer(0)
+    safety_timer.init(period=SAFETY_TICK_MS, mode=machine.Timer.PERIODIC,
+                      callback=lambda _timer: bank.tick(safety_clock.now(), device.offline_since))
+
+    print("SMARTPOT-READY firmware={} reset={}".format(FIRMWARE, machine.reset_cause()))
     while True:
         try:
-            device.step(time.time())
+            device.step(clock.now())
         except Exception as error:
             # Un error inesperado no debe dejar un actuador encendido sin control: el ciclo sigue.
             print("Loop error:", error)
+        watchdog.feed()
         time.sleep(POLL_SECONDS)
 
 
-main()
+def run():
+    # Lo primero es dejar todas las salidas en bajo, antes de la pantalla o la red.
+    bank = ActuatorBank({
+        "WATER_PUMP": Actuator("Water pump", 19),
+        "UV_LIGHT": Actuator("UV light", 18),
+        "FAN": Actuator("Fan", 5),
+    })
+    try:
+        main(bank)
+    except KeyboardInterrupt:
+        # Detención manual desde el REPL: se apagan las salidas y no se reinicia.
+        bank.all_off("stopped")
+        raise
+    except BaseException as error:
+        bank.all_off("fatal")
+        print("SMARTPOT-FATAL", type(error).__name__, error)
+        sys.print_exception(error)
+        time.sleep(1)
+        machine.reset()
+
+
+run()

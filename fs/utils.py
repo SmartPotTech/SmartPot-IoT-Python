@@ -1,3 +1,4 @@
+import gc
 import time
 
 import ntptime
@@ -50,3 +51,42 @@ def print_table(readings, moment=None):
     for key, label, unit in LABELS:
         print(format_row(label, readings.get(key), unit))
     print(line)
+
+
+class MonotonicClock:
+    """Monotonic seconds since boot that never jump when NTP sets the wall clock.
+
+    Accumulates `ticks_diff` so the counter of `ticks_ms` can wrap without effect; under CPython (tests) it
+    falls back to `time.monotonic`.
+    """
+
+    def __init__(self):
+        self._ticks = getattr(time, "ticks_ms", None)
+        self._diff = getattr(time, "ticks_diff", None)
+        self._last = self._read()
+        self._elapsed_ms = 0
+
+    def _read(self):
+        if self._ticks is None:
+            return int(time.monotonic() * 1000)
+        return self._ticks()
+
+    def now(self):
+        current = self._read()
+        delta = self._diff(current, self._last) if self._diff else current - self._last
+        self._last = current
+        self._elapsed_ms += max(0, delta)
+        return self._elapsed_ms / 1000
+
+
+def heap_report(low_threshold=None):
+    """Prints free and used heap; returns the free bytes (None where the runtime has no counters)."""
+    free = getattr(gc, "mem_free", None)
+    alloc = getattr(gc, "mem_alloc", None)
+    if free is None or alloc is None:
+        return None
+    available = free()
+    print("SMARTPOT-HEAP free={} used={}".format(available, alloc()))
+    if low_threshold and available < low_threshold:
+        print("SMARTPOT-HEAP-LOW free={} threshold={}".format(available, low_threshold))
+    return available
