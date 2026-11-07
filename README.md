@@ -92,6 +92,25 @@ Wokwi does not support `.crt` files, so the public CA is stored as PEM text insi
 
 The loop runs every half second with or without network: it turns off timed actuators on schedule, reads sensors every `interval_seconds`, and shows them on the LCD and in the console with the reading timestamp. When connected to the broker, it also publishes telemetry and handles commands. If the connection drops, it retries the broker every 10 s and WiFi every 30 s; the top-right corner of the LCD shows an antenna when online and an `X` when offline.
 
+### Safety and Reliability
+
+* **Actuator safety policy** (shared with the Rust firmware and the contract fixture): `durationSeconds` must be an
+  integer between 1 and 3600, otherwise the command gets a `FAILED` ACK with the reason. The water pump never runs
+  without a limit: `ACTIVATE` without a duration uses 3600 s, and it switches off after 300 s without a broker session.
+  The UV light and the fan keep indefinite activation. `active_low: True` supports relay boards that switch on with a
+  low input; GPIO5 (fan) is a strapping pin that toggles at boot, so add a pull-down on the relay input.
+* **Watchdog**: `machine.WDT` (`watchdog_seconds`, default 30; `0` disables it while debugging from the REPL) restarts
+  the board if the loop hangs. Outputs are switched off first at boot and on any fatal error, which restarts the board.
+* **Never blocked by the network**: ACKs are published after `check_msg` returns, the socket times out after 15 s, the
+  device pings the broker every 30 s, and any client error counts as a lost connection. A hardware timer turns timed
+  actuators off even while the loop waits on the network, and timers use a monotonic clock so NTP never stretches them.
+* **Resilient LCD**: telemetry is published before drawing; a missing or failing LCD is replaced by a no-op and probed
+  again, and only changed rows are redrawn.
+* **Memory**: `gc.collect()` runs before every TLS connection, `SMARTPOT-HEAP` reports the free heap (`heap_min_free`
+  prints `SMARTPOT-HEAP-LOW` below a threshold), and repeated out-of-memory connection failures restart the board.
+* **Plain-text markers** for automated tests: `SMARTPOT-READY`, `WIFI-UP`, `MQTT-UP`, `MQTT-DOWN`, `ACT`, `ACK`, `LCD`,
+  `HEAP` and `FATAL`.
+
 ### Installation Guide
 
 #### 1. Create the crop in SmartPot
@@ -231,6 +250,29 @@ Wokwi no admite archivos `.crt`, así que la CA pública viaja como texto en `co
 ### Sin conexión
 
 El ciclo corre cada medio segundo con o sin red: apaga a tiempo los actuadores, lee los sensores cada `interval_seconds` y los muestra en la LCD y en la consola, con la hora de la lectura. Con el broker conectado, además publica la telemetría y atiende los comandos. Si la conexión se cae, reintenta el broker cada 10 s y el WiFi cada 30 s; la esquina de la pantalla muestra una antena en línea y una equis sin conexión.
+
+### Seguridad y fiabilidad
+
+* **Política de actuadores** (compartida con el firmware Rust y con el fixture del contrato): `durationSeconds` debe ser
+  un entero entre 1 y 3600; si no, el comando recibe un ACK `FAILED` con el motivo. La bomba de agua nunca queda encendida
+  sin límite: un `ACTIVATE` sin duración usa 3600 s y se apaga tras 300 s sin sesión con el broker. La luz UV y el
+  ventilador conservan el encendido indefinido. `active_low: True` admite módulos de relé que se activan con nivel bajo;
+  GPIO5 (ventilador) es un pin de *strapping* que conmuta al arrancar, así que conviene un *pull-down* en la entrada del
+  relé.
+* **Watchdog**: `machine.WDT` (`watchdog_seconds`, 30 por defecto; `0` lo desactiva para depurar desde el REPL) reinicia
+  la placa si el ciclo se bloquea. Las salidas se apagan antes que nada al arrancar y ante cualquier error fatal, que
+  reinicia la placa.
+* **La red nunca bloquea el ciclo**: los ACK se publican cuando `check_msg` termina, el socket tiene un tiempo límite de
+  15 s, el dispositivo envía PINGREQ cada 30 s y cualquier error del cliente cuenta como conexión perdida. Un temporizador
+  de hardware apaga los actuadores temporizados aunque el ciclo esté esperando a la red, y los temporizadores usan un
+  reloj monótono para que NTP nunca los alargue.
+* **LCD resistente**: la telemetría se publica antes de dibujar; un LCD ausente o averiado se sustituye por uno nulo y se
+  vuelve a buscar, y solo se reescriben las filas que cambian.
+* **Memoria**: `gc.collect()` se ejecuta antes de cada conexión TLS, `SMARTPOT-HEAP` informa del heap libre
+  (`heap_min_free` imprime `SMARTPOT-HEAP-LOW` por debajo de un umbral) y los fallos de memoria repetidos al conectar
+  reinician la placa.
+* **Marcadores de texto** para pruebas automáticas: `SMARTPOT-READY`, `WIFI-UP`, `MQTT-UP`, `MQTT-DOWN`, `ACT`, `ACK`,
+  `LCD`, `HEAP` y `FATAL`.
 
 ### Guía de Instalación
 
