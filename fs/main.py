@@ -37,6 +37,8 @@ class Link:
         up = self.station.isconnected()
         if up and not self.was_up:
             print("SMARTPOT-WIFI-UP ssid={}".format(WIFI["ssid"]))
+        elif self.was_up and not up:
+            print("SMARTPOT-WIFI-DOWN")
         self.was_up = up
         return up
 

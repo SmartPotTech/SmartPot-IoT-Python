@@ -188,6 +188,8 @@ class SmartPotClient:
     def __init__(self, crop_id, device_key, host, port, use_tls, ca_data, on_command, client_factory=None,
                  capabilities=None):
         self.crop_id = crop_id
+        self.host = host
+        self.use_tls = use_tls
         self.topics = topics(crop_id)
         self.on_command = on_command
         # Se codifica una sola vez; None mantiene la publicación de capacidades desactivada.
@@ -212,7 +214,14 @@ class SmartPotClient:
         except OSError:
             raise
         except Exception as error:
+            if type(error).__name__ == "MQTTException":
+                # El broker respondió: el TLS se verificó y rechazó la clave del dispositivo.
+                if self.use_tls:
+                    print("SMARTPOT-TLS-OK host={}".format(self.host))
+                print("SMARTPOT-MQTT-REFUSED")
             raise OSError(refusal(error))
+        if self.use_tls:
+            print("SMARTPOT-TLS-OK host={}".format(self.host))
         self.client.publish(self.topics["status"], b"online", retain=True, qos=1)
         if self.capabilities is not None:
             # Retenido para que la API conozca el hardware antes de enviar comandos.
