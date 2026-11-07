@@ -16,6 +16,8 @@ SMARTPOT = {
     "port": 8883,
     "tls": True,
     "interval_seconds": 30,
+    # True si los módulos de relé se activan con nivel bajo.
+    "active_low": False,
     # Watchdog de hardware: reinicia la placa si el bucle se bloquea. 0 lo desactiva (solo para depurar).
     "watchdog_seconds": 30,
     # Opcional: por debajo de estos bytes libres se imprime SMARTPOT-HEAP-LOW.

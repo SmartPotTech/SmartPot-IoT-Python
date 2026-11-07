@@ -179,3 +179,17 @@ def test_monotonic_clock_never_goes_backwards():
     clock = MonotonicClock()
     readings = [clock.now() for _ in range(1000)]
     assert readings == sorted(readings)
+
+
+def test_active_low_relays_are_off_with_the_pin_high():
+    relay = Actuator("Water pump", 19, active_low=True)
+    assert relay.pin.value() == 1 and not relay.active
+    relay.turn_on(10, 0)
+    assert relay.pin.value() == 0
+    relay.turn_off()
+    assert relay.pin.value() == 1
+
+    standard = Actuator("Fan", 5)
+    assert standard.pin.value() == 0
+    standard.turn_on(None, 0)
+    assert standard.pin.value() == 1

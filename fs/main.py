@@ -153,10 +153,12 @@ def main(bank):
 
 def run():
     # Lo primero es dejar todas las salidas en bajo, antes de la pantalla o la red.
+    active_low = config.SMARTPOT.get("active_low", False)
+    # GPIO5 es un pin de strapping: emite una señal PWM al arrancar; en hardware conviene un pull-down en el relé.
     bank = ActuatorBank({
-        "WATER_PUMP": Actuator("Water pump", 19),
-        "UV_LIGHT": Actuator("UV light", 18),
-        "FAN": Actuator("Fan", 5),
+        "WATER_PUMP": Actuator("Water pump", 19, active_low=active_low),
+        "UV_LIGHT": Actuator("UV light", 18, active_low=active_low),
+        "FAN": Actuator("Fan", 5, active_low=active_low),
     })
     try:
         main(bank)

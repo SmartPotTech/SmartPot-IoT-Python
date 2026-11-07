@@ -21,8 +21,10 @@ def readable(seconds):
 class Actuator:
     """Digital output (relay or LED in simulation) with optional automatic timed shutoff."""
 
-    def __init__(self, name, pin_num, feminine=False):
+    def __init__(self, name, pin_num, feminine=False, active_low=False):
         self.name = name
+        # Con módulos de relé activos en bajo, la salida en alto los mantiene apagados.
+        self.active_low = active_low
         # Se conserva el parámetro opcional por compatibilidad con llamadas previas.
         self.feminine = feminine
         # Clave del contrato (WATER_PUMP, ...); la asigna el banco de actuadores.
@@ -31,10 +33,13 @@ class Actuator:
         self.active = False
         self.until = None
         self.on_since = None
-        self.pin.off()
+        self._drive(False)
+
+    def _drive(self, on):
+        self.pin.value(0 if on == self.active_low else 1)
 
     def turn_on(self, duration=None, now=0):
-        self.pin.on()
+        self._drive(True)
         self.active = True
         self.on_since = now
         self.until = now + duration if duration else None
@@ -42,7 +47,7 @@ class Actuator:
 
     def turn_off(self, reason="command"):
         was_active = self.active
-        self.pin.off()
+        self._drive(False)
         self.active = False
         self.until = None
         self.on_since = None
