@@ -75,9 +75,13 @@ def parse_command(payload):
         # Solo se admite None o un entero no negativo; bool es subclase de int y se excluye.
         if duration is not None and (isinstance(duration, bool) or not isinstance(duration, int) or duration < 0):
             return None
+        # `LIGHTS` es el alias heredado del contrato anterior; UV_LIGHT es el canónico.
+        canonical_actuator = actuator.strip().upper()
+        if canonical_actuator == "LIGHTS":
+            canonical_actuator = "UV_LIGHT"
         return {
             "id": command_id,
-            "actuator": actuator.upper(),
+            "actuator": canonical_actuator,
             "action": action.upper(),
             "durationSeconds": duration,
         }
