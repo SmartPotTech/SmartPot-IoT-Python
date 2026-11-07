@@ -127,7 +127,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-The suite contains 72 tests and verifies the MQTT contract, integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
+The suite contains 78 tests and verifies the MQTT contract against the shared v1 fixture (sensor/actuator names and the legacy `LIGHTS` alias), integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
 
 ### Documentation
 
@@ -266,7 +266,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-La suite contiene 72 pruebas y verifica el contrato MQTT, la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
+La suite contiene 78 pruebas y verifica el contrato MQTT contra la fixture v1 compartida (nombres de sensores y actuadores y el alias heredado `LIGHTS`), la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
 
 ### Documentación
 
