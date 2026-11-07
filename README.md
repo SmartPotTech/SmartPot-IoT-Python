@@ -133,6 +133,7 @@ The suite contains 78 tests and verifies the MQTT contract against the shared v1
 
 The firmware only speaks MQTT with the broker; everything else is decided by the platform. Component documentation is in [`docs/`](docs/SmartPot_IoT_Documentation.md) (also in [DOCX](docs/SmartPot_IoT_Documentation.docx) and [PDF](docs/SmartPot_IoT_Documentation.pdf)), with diagrams in [`docs/diagrams`](docs/diagrams). The [technical documentation](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Technical_Documentation.md) details the MQTT contract, TLS connection, and circuit:
 
+- [Interactive diagrams](docs/diagrams/interactive/README.md#english): ESP32 pins and firmware modules, in English and Spanish, with links to the exact source lines
 - [Complete operation](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_02_Operation_Sequence.svg)
 - [State machines](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_05_State_Machines.svg)
 - [Complete architecture](https://github.com/SmartPotTech/.github/blob/main/docs/diagrams/SmartPot_Global_01_Architecture.svg)
@@ -271,6 +272,8 @@ La suite contiene 78 pruebas y verifica el contrato MQTT contra la fixture v1 co
 ### Documentación
 
 El firmware solo habla MQTT con el broker; todo lo demás lo decide la plataforma. Su documentación propia está en [`docs/`](docs/SmartPot_IoT_Documentation.md) (también en [DOCX](docs/SmartPot_IoT_Documentation.docx) y [PDF](docs/SmartPot_IoT_Documentation.pdf)), con sus diagramas en [`docs/diagrams`](docs/diagrams). La [documentación técnica](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Technical_Documentation.md) detalla el contrato MQTT, la conexión con TLS y el circuito.
+
+- [Diagramas interactivos](docs/diagrams/interactive/README.md#español): los pines del ESP32 y los módulos del firmware, en español e inglés, con enlaces a las líneas exactas del código
 
 ### Licencia
 
