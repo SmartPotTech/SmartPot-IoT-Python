@@ -4,7 +4,7 @@ flowchart LR
     direction TB
     main["main.py<br/>bienvenida · WiFi · hora"]
     device["device.py<br/>Device · ciclo cada 0,5 s<br/>mide sin red · reintenta"]
-    config["config.py<br/>WIFI · SMARTPOT · BROKER con la CA en texto<br/>(Wokwi no admite .crt; no se versiona)"]
+    config["config.json<br/>WIFI · SMARTPOT · BROKER con la CA en texto<br/>(Wokwi no admite .crt; no se versiona)"]
     client["smartpot_client.py<br/>SmartPotClient · tópicos v1<br/>CA en DER · umqtt de 1.22 o 1.23+<br/>capabilities retenido · 6 sensores · 3 actuadores"]
     sensors["sensors.py<br/>AtmosphereSensor DHT22<br/>Light · PH · TDS · SoilMoisture (ADC)"]
     actuators["actuators.py<br/>ActuatorBank · apagado por duración"]

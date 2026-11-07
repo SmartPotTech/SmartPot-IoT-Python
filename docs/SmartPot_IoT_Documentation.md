@@ -48,7 +48,7 @@ flowchart LR
   subgraph esp["ESP32 · MicroPython 1.24.1 · physical or Wokwi"]
     direction TB
     main["main.py<br/>WiFi · NTP · main loop"]
-    config["config.py<br/>WIFI · SMARTPOT · BROKER with CA<br/>(untracked)"]
+    config["config.json<br/>WIFI · SMARTPOT · BROKER with CA<br/>(untracked)"]
     client["smartpot_client.py<br/>SmartPotClient · v1 topics<br/>telemetry · commands · ACK · status<br/>retained capabilities · 6 sensors · 3 actuators"]
     sensors["sensors.py<br/>AtmosphereSensor DHT22<br/>Light · PH · TDS · SoilMoisture (ADC)"]
     actuators["actuators.py<br/>ActuatorBank · timed shutoff"]
@@ -106,7 +106,7 @@ flowchart TB
   wifi -->|"No"| wait["Wait 30 s"] --> wifi
   wifi -->|"Yes"| ntp["NTP clock sync"]
   ntp --> mqtt{"Connected to broker?"}
-  mqtt -->|"No"| connect["CONNECT with TLS and config.py CA<br/>last will offline · status online<br/>retained capabilities · subscribe to commands"]
+  mqtt -->|"No"| connect["CONNECT with TLS and config.json CA<br/>last will offline · status online<br/>retained capabilities · subscribe to commands"]
   connect --> mqtt
   mqtt -->|"Yes"| poll["poll: handle incoming commands"]
   poll --> tick["bank.tick: turn off actuators<br/>whose duration expired"]
@@ -167,19 +167,19 @@ sequenceDiagram
 | Parameter | Value |
 | --- | --- |
 | Broker | `mqtt.smartpot.app:8883`, MQTT over TLS 1.2 or newer |
-| Certificate | Signed by SmartPot's internal CA; verified by the firmware using the public CA embedded in `config.py` under `BROKER["CA_CRT"]` |
+| Certificate | Signed by SmartPot's internal CA; verified by the firmware using the public CA embedded in `config.json` under `BROKER["CA_CRT"]` |
 | Username & Key | Crop ID and device key, shown once by the PWA upon creating the real crop or rotating the key |
 | Client ID | `smartpot-<cropId>` |
 | Status | Retained `online` upon connecting and `offline` as Last Will |
 
 > [!WARNING]
-> **Wokwi.** Keep your copy of the project private: anyone who sees `config.py` can publish as your crop. If leaked, generate a new key from the Device tab.
+> **Wokwi.** Keep your copy of the project private: anyone who sees `config.json` can publish as your crop. If leaked, generate a new key from the Device tab.
 
 <!-- parte: PART III | Configuration & Testing -->
 
 ### 7. Configuration
 
-The PWA generates `config.py` in its connection guide, containing the WiFi network (yours or `Wokwi-GUEST`), the crop's `SMARTPOT` block, and the `BROKER` block with the broker CA. `config.py` is untracked; `config.example.py` is the template.
+The PWA generates `config.json` in its connection guide, containing the WiFi network (yours or `Wokwi-GUEST`), the crop's `SMARTPOT` block, and the `BROKER` block with the broker CA. `config.json` is untracked; `config.example.json` is the template, and the Rust firmware reads the same file when it is built.
 
 | Key | Purpose |
 | --- | --- |
@@ -197,8 +197,8 @@ The PWA generates `config.py` in its connection guide, containing the WiFi netwo
 
 | Environment | Steps |
 | --- | --- |
-| Physical board | Wire the circuit, flash MicroPython 1.24.1 (1.22+ works), copy `fs/` with `mpremote`, add your `config.py` (includes the CA), and power on |
-| Wokwi in browser | Open the project, paste your `config.py`, and run; the `Wokwi-GUEST` network has Internet access |
+| Physical board | Wire the circuit, flash MicroPython 1.24.1 (1.22+ works), copy `fs/` with `mpremote`, add your `config.json` (includes the CA), and power on |
+| Wokwi in browser | Open the project, create `config.json` with the guide's block, and run; the `Wokwi-GUEST` network has Internet access |
 | Local Wokwi | `uv sync`, start the simulation with `wokwi.toml`, and run `uv run python start.py` |
 
 ---
@@ -262,19 +262,19 @@ Recibe comandos JSON en `smartpot/v1/{cropId}/commands`, acciona los pines corre
 | Parámetro | Valor |
 | --- | --- |
 | Broker | `mqtt.smartpot.app:8883`, MQTT sobre TLS 1.2 o superior |
-| Certificado | Firmado por la CA propia de SmartPot; el firmware lo verifica con la CA pública que trae `config.py` en `BROKER["CA_CRT"]` |
+| Certificado | Firmado por la CA propia de SmartPot; el firmware lo verifica con la CA pública que trae `config.json` en `BROKER["CA_CRT"]` |
 | Usuario y clave | El id del cultivo y la clave del dispositivo, que la PWA muestra una sola vez al crear el cultivo real o al rotarla |
 | Client id | `smartpot-<cropId>` |
 | Estado | `online` retenido al conectar y `offline` como última voluntad |
 
 > [!WARNING]
-> **Wokwi.** Deja tu copia del proyecto como privada: quien vea `config.py` puede publicar como tu cultivo. Si se filtra, genera una nueva clave desde la pestaña Dispositivo.
+> **Wokwi.** Deja tu copia del proyecto como privada: quien vea `config.json` puede publicar como tu cultivo. Si se filtra, genera una nueva clave desde la pestaña Dispositivo.
 
 <!-- parte: PARTE III | Operación -->
 
 ### 7. Configuración
 
-La PWA genera `config.py` en su guía de conexión, con la red WiFi (la tuya o `Wokwi-GUEST`), el bloque `SMARTPOT` del cultivo y el bloque `BROKER` con la CA del broker. `config.py` no se versiona; `config.example.py` es la plantilla.
+La PWA genera `config.json` en su guía de conexión, con la red WiFi (la tuya o `Wokwi-GUEST`), el bloque `SMARTPOT` del cultivo y el bloque `BROKER` con la CA del broker. `config.json` no se versiona; `config.example.json` es la plantilla, y el firmware Rust lee el mismo archivo al compilar.
 
 | Clave | Uso |
 | --- | --- |
@@ -292,6 +292,6 @@ La PWA genera `config.py` en su guía de conexión, con la red WiFi (la tuya o `
 
 | Dónde | Pasos |
 | --- | --- |
-| Placa física | Arma el circuito, graba MicroPython 1.24.1 (funciona desde 1.22), copia `fs/` con `mpremote`, agrega tu `config.py` (ya trae la CA) y enciende |
-| Wokwi en el navegador | Abre el proyecto, pega tu `config.py` y ejecuta; la red `Wokwi-GUEST` tiene salida a internet |
+| Placa física | Arma el circuito, graba MicroPython 1.24.1 (funciona desde 1.22), copia `fs/` con `mpremote`, agrega tu `config.json` (ya trae la CA) y enciende |
+| Wokwi en el navegador | Abre el proyecto, crea `config.json` con el bloque de la guía y ejecuta; la red `Wokwi-GUEST` tiene salida a internet |
 | Wokwi local | `uv sync`, inicia la simulación con `wokwi.toml` y ejecuta `uv run python start.py` |
