@@ -91,7 +91,7 @@ Wokwi does not support `.crt` files, so the public CA is stored as PEM text insi
 
 ### Offline Operation
 
-The loop runs every half second with or without network: it turns off timed actuators on schedule, reads sensors every `interval_seconds`, and shows them on the LCD and in the console with the reading timestamp. When connected to the broker, it also publishes telemetry and handles commands. If the connection drops, it retries the broker every 10 s and WiFi every 30 s; the top-right corner of the LCD shows an antenna when online and an `X` when offline.
+The loop runs every half second with or without network: it turns off timed actuators on schedule, reads sensors every `interval_seconds`, and shows them on the LCD and in the console with the reading timestamp. When connected to the broker, it also publishes telemetry and handles commands; every new broker session starts with a fresh reading. If the connection drops, it retries the broker and WiFi with exponential backoff and jitter (2 s to 60 s). The LCD redraws at once when an actuator or the broker link changes; its top-right corner shows an antenna when online and an `X` when offline.
 
 ### Safety and Reliability
 
@@ -100,13 +100,21 @@ The loop runs every half second with or without network: it turns off timed actu
   without a limit: `ACTIVATE` without a duration uses 3600 s, and it switches off after 300 s without a broker session.
   The UV light and the fan keep indefinite activation. `active_low: True` supports relay boards that switch on with a
   low input; GPIO5 (fan) is a strapping pin that toggles at boot, so add a pull-down on the relay input.
-* **Watchdog**: `machine.WDT` (`watchdog_seconds`, default 30; `0` disables it while debugging from the REPL) restarts
-  the board if the loop hangs. Outputs are switched off first at boot and on any fatal error, which restarts the board.
+* **Watchdog**: `machine.WDT` (`watchdog_seconds`, default 30) is fed from the safety timer only while the loop keeps
+  beating. If the loop stalls for 120 s, the outputs are switched off, `SMARTPOT-FATAL watchdog task=loop stalled` is
+  printed and the board restarts; if the interpreter hangs, the hardware watchdog restarts it. `0` disables both while
+  debugging from the REPL. Outputs are switched off first at boot and on any fatal error, which restarts the board.
 * **Never blocked by the network**: ACKs are published after `check_msg` returns, the socket times out after 15 s, the
-  device pings the broker every 30 s, and any client error counts as a lost connection. A hardware timer turns timed
+  device pings the broker every 30 s (a ping left unanswered closes the session at the next one), and any client error
+  counts as a lost connection. A hardware timer turns timed
   actuators off even while the loop waits on the network, and timers use a monotonic clock so NTP never stretches them.
-* **Resilient LCD**: telemetry is published before drawing; a missing or failing LCD is replaced by a no-op and probed
-  again, and only changed rows are redrawn.
+* **Resilient LCD**: telemetry is published before drawing; a missing or failing LCD prints `LCD not available at
+  0x27` once, is replaced by a no-op and probed again every 10 s, and only changed rows are redrawn.
+* **Sensors**: every sensor is sampled every 2 s (the DHT22 minimum) and a value stays valid for three periods, so one
+  failed DHT22 read does not blank the table. Each analog channel averages 16 raw 12-bit reads and scales them as
+  `raw / 4095`, exactly like the Rust firmware (`read_u16` approximates that scale and shifted the second decimal).
+* **Same output as the Rust firmware**: `tests/fixtures/console_v1.json` (identical in SmartPot-IoT) pins the console
+  messages, the reading table, the LCD rows, the analog scale and the command rejection reasons for both firmwares.
 * **Memory**: `gc.collect()` runs before every TLS connection, `SMARTPOT-HEAP` reports the free heap (`heap_min_free`
   prints `SMARTPOT-HEAP-LOW` below a threshold), and repeated out-of-memory connection failures restart the board.
 * **Plain-text markers** for automated tests: `SMARTPOT-READY`, `WIFI-UP`, `MQTT-UP`, `MQTT-DOWN`, `ACT`, `ACK`, `LCD`,
@@ -251,7 +259,7 @@ Wokwi no admite archivos `.crt`, así que la CA pública viaja como texto en `co
 
 ### Sin conexión
 
-El ciclo corre cada medio segundo con o sin red: apaga a tiempo los actuadores, lee los sensores cada `interval_seconds` y los muestra en la LCD y en la consola, con la hora de la lectura. Con el broker conectado, además publica la telemetría y atiende los comandos. Si la conexión se cae, reintenta el broker cada 10 s y el WiFi cada 30 s; la esquina de la pantalla muestra una antena en línea y una equis sin conexión.
+El ciclo corre cada medio segundo con o sin red: apaga a tiempo los actuadores, lee los sensores cada `interval_seconds` y los muestra en la LCD y en la consola, con la hora de la lectura. Con el broker conectado, además publica la telemetría y atiende los comandos; cada sesión nueva con el broker empieza con una lectura fresca. Si la conexión se cae, reintenta el broker y el WiFi con espera exponencial y dispersión (de 2 s a 60 s). La pantalla se redibuja al momento cuando cambia un actuador o la conexión con el broker; su esquina muestra una antena en línea y una equis sin conexión.
 
 ### Seguridad y fiabilidad
 
@@ -261,15 +269,25 @@ El ciclo corre cada medio segundo con o sin red: apaga a tiempo los actuadores, 
   ventilador conservan el encendido indefinido. `active_low: True` admite módulos de relé que se activan con nivel bajo;
   GPIO5 (ventilador) es un pin de *strapping* que conmuta al arrancar, así que conviene un *pull-down* en la entrada del
   relé.
-* **Watchdog**: `machine.WDT` (`watchdog_seconds`, 30 por defecto; `0` lo desactiva para depurar desde el REPL) reinicia
-  la placa si el ciclo se bloquea. Las salidas se apagan antes que nada al arrancar y ante cualquier error fatal, que
-  reinicia la placa.
+* **Watchdog**: `machine.WDT` (`watchdog_seconds`, 30 por defecto) se alimenta desde el temporizador de seguridad solo
+  mientras el ciclo late. Si el ciclo se detiene 120 s, se apagan las salidas, se imprime `SMARTPOT-FATAL watchdog
+  task=loop stalled` y la placa se reinicia; si se cuelga el intérprete, la reinicia el watchdog de hardware. `0`
+  desactiva ambos para depurar desde el REPL. Las salidas se apagan antes que nada al arrancar y ante cualquier error
+  fatal, que reinicia la placa.
 * **La red nunca bloquea el ciclo**: los ACK se publican cuando `check_msg` termina, el socket tiene un tiempo límite de
-  15 s, el dispositivo envía PINGREQ cada 30 s y cualquier error del cliente cuenta como conexión perdida. Un temporizador
+  15 s, el dispositivo envía PINGREQ cada 30 s (un PINGREQ sin respuesta cierra la sesión en el siguiente) y cualquier
+  error del cliente cuenta como conexión perdida. Un temporizador
   de hardware apaga los actuadores temporizados aunque el ciclo esté esperando a la red, y los temporizadores usan un
   reloj monótono para que NTP nunca los alargue.
-* **LCD resistente**: la telemetría se publica antes de dibujar; un LCD ausente o averiado se sustituye por uno nulo y se
-  vuelve a buscar, y solo se reescriben las filas que cambian.
+* **LCD resistente**: la telemetría se publica antes de dibujar; un LCD ausente o averiado imprime una vez `LCD not
+  available at 0x27`, se sustituye por uno nulo y se vuelve a buscar cada 10 s, y solo se reescriben las filas que cambian.
+* **Sensores**: todos se muestrean cada 2 s (el mínimo del DHT22) y un valor sigue siendo válido durante tres periodos,
+  así que una lectura fallida del DHT22 no deja la tabla en blanco. Cada canal analógico promedia 16 lecturas crudas de
+  12 bits y las escala como `raw / 4095`, igual que el firmware Rust (`read_u16` aproxima esa escala y movía el segundo
+  decimal).
+* **Misma salida que el firmware Rust**: `tests/fixtures/console_v1.json` (idéntico en SmartPot-IoT) fija los mensajes
+  de consola, la tabla de lecturas, las filas del LCD, la escala analógica y los motivos de rechazo de comandos de los
+  dos firmwares.
 * **Memoria**: `gc.collect()` se ejecuta antes de cada conexión TLS, `SMARTPOT-HEAP` informa del heap libre
   (`heap_min_free` imprime `SMARTPOT-HEAP-LOW` por debajo de un umbral) y los fallos de memoria repetidos al conectar
   reinician la placa.

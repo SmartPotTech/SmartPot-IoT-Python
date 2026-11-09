@@ -1,24 +1,18 @@
 <!-- portada
-eyebrow: Component Documentation · Documentación del componente
+eyebrow: Component Technical Documentation
 titulo: SmartPot-IoT-Python
 acento: IoT
-subtitulo: Real Crop Firmware · El firmware de un cultivo real
-bajada: MicroPython on ESP32 (physical or Wokwi): sensors, LCD, actuators, and MQTT v1 over TLS · MicroPython en un ESP32, físico o simulado en Wokwi: sensores, pantalla, actuadores y contrato MQTT v1 con TLS.
-documento: SmartPot-IoT-Python
-version: 2.0 · November 2026 / noviembre 2026
+subtitulo: Real Crop Firmware Engine
+bajada: MicroPython firmware for ESP32 hardware and Wokwi simulation: sensor acquisition, LCD status interface, PWM actuator control, and MQTT v1 contract with TLS encryption.
+documento: SmartPot-IoT-Python Documentation
+version: 2.0 · November 2026
 equipo: SmartPotTech
 proyecto: smartpot.app
 -->
 
 # SmartPot-IoT-Python
 
-> **Language / Idioma:** [English](#english) | [Español](#español)
-
----
-
-<a id="english"></a>
-
-## English
+> **Language / Idioma:** ---
 
 ### Document Sheet
 
@@ -45,41 +39,31 @@ SmartPot-IoT-Python is the program running on the device of a **real crop**: an 
 ```mermaid
 %%{init: {"theme": "base", "fontFamily": "Segoe UI, Arial, sans-serif", "themeVariables": {"fontFamily": "Segoe UI, Arial, sans-serif", "fontSize": "15px", "primaryColor": "#DDF5EA", "primaryTextColor": "#17261F", "primaryBorderColor": "#067A52", "secondaryColor": "#E3F2FB", "secondaryTextColor": "#17261F", "secondaryBorderColor": "#1F6FA0", "tertiaryColor": "#F2F7F4", "tertiaryTextColor": "#17261F", "tertiaryBorderColor": "#D5E3DC", "lineColor": "#5B6B63", "textColor": "#17261F", "mainBkg": "#DDF5EA", "nodeBorder": "#067A52", "clusterBkg": "#F7FAF8", "clusterBorder": "#D5E3DC", "edgeLabelBackground": "#FFFFFF", "actorBkg": "#067A52", "actorBorder": "#0B3D2B", "actorTextColor": "#FFFFFF", "actorLineColor": "#5B6B63", "signalColor": "#17261F", "signalTextColor": "#17261F", "labelBoxBkgColor": "#0B3D2B", "labelBoxBorderColor": "#0B3D2B", "labelTextColor": "#FFFFFF", "loopTextColor": "#0B3D2B", "noteBkgColor": "#FDF4DD", "noteBorderColor": "#C98D12", "noteTextColor": "#17261F", "activationBkgColor": "#DDF5EA", "activationBorderColor": "#067A52", "attributeBackgroundColorOdd": "#FFFFFF", "attributeBackgroundColorEven": "#F2F7F4"}, "layout": "elk", "elk": {"nodePlacementStrategy": "BRANDES_KOEPF", "mergeEdges": false, "cycleBreakingStrategy": "GREEDY"}}}%%
 flowchart LR
-  subgraph esp["ESP32 · MicroPython 1.24.1 · physical or Wokwi"]
+  broker["SmartPot-Broker (EMQX)<br/>mqtt.smartpot.app:8883"]
+  subgraph esp["ESP32 · MicroPython v1.24+ Runtime"]
     direction TB
-    main["main.py<br/>WiFi · NTP · main loop"]
-    config["config.json<br/>WIFI · SMARTPOT · BROKER with CA<br/>(untracked)"]
-    client["smartpot_client.py<br/>SmartPotClient · v1 topics<br/>telemetry · commands · ACK · status<br/>retained capabilities · 6 sensors · 3 actuators"]
-    sensors["sensors.py<br/>AtmosphereSensor DHT22<br/>Light · PH · TDS · SoilMoisture (ADC)"]
-    actuators["actuators.py<br/>ActuatorBank · timed shutoff"]
-    display["display.py<br/>LCDDisplay 20 × 4 over I2C"]
-    utils["utils.py<br/>NTP clock · console table"]
+    main["main.py<br/>Async coordinator & event loop"]
+    client["smartpot_client.py<br/>umqtt.simple with TLS 1.3"]
+    sensors["sensors.py<br/>DHT22 & ADC potentiometer scaling"]
+    actuators["actuators.py<br/>Relay timers & hardware safety"]
+    display["display.py<br/>I2C LCD2004 character display"]
   end
-  subgraph hw["Circuit"]
+  subgraph hw["Hardware Peripherals"]
     direction TB
-    dht["DHT22 · GPIO 15"]
-    adc["Light 34 · pH 35 · TDS 32 · substrate 33"]
-    outs["Pump 19 · UV light 18 · fan 5"]
-    lcd["LCD · SCL 16 · SDA 17"]
+    dht["DHT22 (GPIO 15)"]
+    adc["ADC Sensors (GPIO 34, 35, 32, 33)"]
+    relays["Relays: Pump (19), UV (18), Fan (5)"]
+    lcd["LCD2004 (I2C 21/22)"]
   end
-  broker["mqtt.smartpot.app:8883<br/>TLS 1.2+"]
-  main --> config & client & sensors & actuators & display & utils
+  main --> client & sensors & actuators & display
   sensors --> dht & adc
-  actuators --> outs
+  actuators --> relays
   display --> lcd
-  client <-->|"user cropId · device key"| broker
-  classDef leaf fill:#DDF5EA,stroke:#067A52,color:#17261F
-  classDef water fill:#E3F2FB,stroke:#1F6FA0,color:#17261F
-  classDef sun fill:#FDF4DD,stroke:#C98D12,color:#17261F
-  classDef clay fill:#FBE9E1,stroke:#B85A38,color:#17261F
+  client <-->|"MQTT over TLS"| broker
   classDef core fill:#067A52,stroke:#0B3D2B,color:#FFFFFF
-  classDef deep fill:#0B3D2B,stroke:#06281C,color:#FFFFFF
-  classDef muted fill:#F2F7F4,stroke:#5B6B63,color:#17261F
-  class main core
-  class config,utils muted
-  class client,sensors,actuators,display leaf
-  class dht,adc,outs,lcd clay
-  class broker water
+  classDef leaf fill:#DDF5EA,stroke:#067A52,color:#17261F
+  class broker,esp core
+  class main,client,sensors,actuators,display leaf
 ```
 
 | Component | ESP32 Pin | Reported Scale |
@@ -102,30 +86,25 @@ flowchart LR
 ```mermaid
 %%{init: {"theme": "base", "fontFamily": "Segoe UI, Arial, sans-serif", "themeVariables": {"fontFamily": "Segoe UI, Arial, sans-serif", "fontSize": "15px", "primaryColor": "#DDF5EA", "primaryTextColor": "#17261F", "primaryBorderColor": "#067A52", "secondaryColor": "#E3F2FB", "secondaryTextColor": "#17261F", "secondaryBorderColor": "#1F6FA0", "tertiaryColor": "#F2F7F4", "tertiaryTextColor": "#17261F", "tertiaryBorderColor": "#D5E3DC", "lineColor": "#5B6B63", "textColor": "#17261F", "mainBkg": "#DDF5EA", "nodeBorder": "#067A52", "clusterBkg": "#F7FAF8", "clusterBorder": "#D5E3DC", "edgeLabelBackground": "#FFFFFF", "actorBkg": "#067A52", "actorBorder": "#0B3D2B", "actorTextColor": "#FFFFFF", "actorLineColor": "#5B6B63", "signalColor": "#17261F", "signalTextColor": "#17261F", "labelBoxBkgColor": "#0B3D2B", "labelBoxBorderColor": "#0B3D2B", "labelTextColor": "#FFFFFF", "loopTextColor": "#0B3D2B", "noteBkgColor": "#FDF4DD", "noteBorderColor": "#C98D12", "noteTextColor": "#17261F", "activationBkgColor": "#DDF5EA", "activationBorderColor": "#067A52", "attributeBackgroundColorOdd": "#FFFFFF", "attributeBackgroundColorEven": "#F2F7F4"}}}%%
 flowchart TB
-  boot(["Boot"]) --> wifi{"WiFi connected?<br/>up to 30 s"}
-  wifi -->|"No"| wait["Wait 30 s"] --> wifi
-  wifi -->|"Yes"| ntp["NTP clock sync"]
-  ntp --> mqtt{"Connected to broker?"}
-  mqtt -->|"No"| connect["CONNECT with TLS and config.json CA<br/>last will offline · status online<br/>retained capabilities · subscribe to commands"]
-  connect --> mqtt
-  mqtt -->|"Yes"| poll["poll: handle incoming commands"]
-  poll --> tick["bank.tick: turn off actuators<br/>whose duration expired"]
-  tick --> due{"Due to read?<br/>every interval_seconds"}
-  due -->|"Yes"| read["Read sensors · LCD display<br/>publish telemetry"]
-  due -->|"No"| sleep["Wait 0.5 s"]
-  read --> sleep --> mqtt
-  poll -.->|"OSError"| lost["Disconnected: wait 10 s<br/>and reconnect"] -.-> mqtt
+  start(["Boot / Reset"]) --> init["Read config.json<br/>Init GPIO, I2C, ADC, LCD"]
+  init --> wifi["Connect Wi-Fi Station<br/>Exponential Backoff"]
+  wifi --> ntp["Synchronize Time (NTP)<br/>RTC Epoch Setting"]
+  ntp --> mqtt["Connect MQTT TLS 8883<br/>Set LWT offline"]
+  mqtt --> caps["Publish Retained Capabilities<br/>6 Sensors · 3 Actuators"]
+  caps --> loop{"Main Event Loop"}
+  loop -->|"Every 30 s"| read["Acquire Sensors<br/>DHT22 + ADC Oversampling"]
+  read --> pub["Publish Telemetry JSON"]
+  pub --> lcd["Update LCD Display"]
+  loop -->|"Incoming message"| msg["Handle MQTT Command"]
+  msg --> ack["Execute & Publish ACK"]
+  ack --> loop
+  lcd --> loop
+  classDef core fill:#067A52,stroke:#0B3D2B,color:#FFFFFF
   classDef leaf fill:#DDF5EA,stroke:#067A52,color:#17261F
   classDef water fill:#E3F2FB,stroke:#1F6FA0,color:#17261F
-  classDef sun fill:#FDF4DD,stroke:#C98D12,color:#17261F
-  classDef clay fill:#FBE9E1,stroke:#B85A38,color:#17261F
-  classDef core fill:#067A52,stroke:#0B3D2B,color:#FFFFFF
-  classDef deep fill:#0B3D2B,stroke:#06281C,color:#FFFFFF
-  classDef muted fill:#F2F7F4,stroke:#5B6B63,color:#17261F
-  class boot core
-  class wifi,mqtt,due sun
-  class wait,sleep,lost muted
-  class ntp,connect,poll,tick,read leaf
+  class start,loop core
+  class init,wifi,ntp,mqtt,caps leaf
+  class read,pub,lcd,msg,ack water
 ```
 
 ### 4. Commands
@@ -133,26 +112,22 @@ flowchart TB
 <!-- diagrama: SmartPot_IoT_02_Command_Handling | titulo=Cómo atiende una orden -->
 ```mermaid
 %%{init: {"theme": "base", "fontFamily": "Segoe UI, Arial, sans-serif", "themeVariables": {"fontFamily": "Segoe UI, Arial, sans-serif", "fontSize": "15px", "primaryColor": "#DDF5EA", "primaryTextColor": "#17261F", "primaryBorderColor": "#067A52", "secondaryColor": "#E3F2FB", "secondaryTextColor": "#17261F", "secondaryBorderColor": "#1F6FA0", "tertiaryColor": "#F2F7F4", "tertiaryTextColor": "#17261F", "tertiaryBorderColor": "#D5E3DC", "lineColor": "#5B6B63", "textColor": "#17261F", "mainBkg": "#DDF5EA", "nodeBorder": "#067A52", "clusterBkg": "#F7FAF8", "clusterBorder": "#D5E3DC", "edgeLabelBackground": "#FFFFFF", "actorBkg": "#067A52", "actorBorder": "#0B3D2B", "actorTextColor": "#FFFFFF", "actorLineColor": "#5B6B63", "signalColor": "#17261F", "signalTextColor": "#17261F", "labelBoxBkgColor": "#0B3D2B", "labelBoxBorderColor": "#0B3D2B", "labelTextColor": "#FFFFFF", "loopTextColor": "#0B3D2B", "noteBkgColor": "#FDF4DD", "noteBorderColor": "#C98D12", "noteTextColor": "#17261F", "activationBkgColor": "#DDF5EA", "activationBorderColor": "#067A52", "attributeBackgroundColorOdd": "#FFFFFF", "attributeBackgroundColorEven": "#F2F7F4"}}}%%
-sequenceDiagram
-  autonumber
-  participant A as SmartPot-API
-  participant B as Broker
-  participant C as SmartPotClient
-  participant K as ActuatorBank
-  A->>B: commands {id, actuator, action, durationSeconds} (QoS 1)
-  B->>C: message on smartpot/v1/{cropId}/commands
-  C->>C: parse_command validates id, actuator and action
-  C->>K: execute(command, now)
-  Note over C,K: 16-id cache: a QoS 1 redelivery repeats the stored ACK<br/>without toggling the pin
-  alt Installed actuator
-    K->>K: turns pin on or off
-    K-->>C: EXECUTED · "Water pump turned on for 15 s"
-  else Missing on device
-    K-->>C: FAILED · "This device does not have HUMIDIFIER"
-  end
-  C->>B: commands/ack {id, status, message} (QoS 1)
-  B->>A: confirms command
-  Note over K: With durationSeconds, tick turns it off automatically<br/>when the timer expires
+flowchart TB
+  recv(["Receive MQTT Command Payload"]) --> parse["Parse JSON Payload"]
+  parse --> checkId{"Is command ID valid & new?"}
+  checkId -->|"No / Duplicate"| drop(["Drop command or skip execution"])
+  checkId -->|"Yes"| actCheck{"Is actuator known?"}
+  actCheck -->|"No"| failAck["Publish ACK FAILED: unknown actuator"]
+  actCheck -->|"Yes"| durCheck{"Is duration valid (1-3600 s)?"}
+  durCheck -->|"No"| failDur["Publish ACK FAILED: invalid duration"]
+  durCheck -->|"Yes"| exec["Set Relay State & Arm Timer"]
+  exec --> ack["Publish ACK EXECUTED"]
+  classDef core fill:#067A52,stroke:#0B3D2B,color:#FFFFFF
+  classDef leaf fill:#DDF5EA,stroke:#067A52,color:#17261F
+  classDef clay fill:#FBE9E1,stroke:#B85A38,color:#17261F
+  class recv,drop core
+  class parse,checkId,actCheck,durCheck,exec,ack leaf
+  class failAck,failDur clay
 ```
 
 ### 5. Telemetry, Capabilities and Command Validation
@@ -204,94 +179,3 @@ The PWA generates `config.json` in its connection guide, containing the WiFi net
 ---
 
 <a id="español"></a>
-
-## Español
-
-### Ficha del documento
-
-| Campo | Valor |
-| --- | --- |
-| Proyecto | SmartPot · [smartpot.app](https://smartpot.app) |
-| Componente | [SmartPot-IoT-Python](https://github.com/SmartPotTech/SmartPot-IoT-Python) |
-| Versión | 2.0 · noviembre 2026 |
-| Alcance | Circuito, módulos del firmware, ciclo principal, comandos, telemetría y capacidades, conexión segura, configuración y pruebas |
-| Documentación de la plataforma | [Documentación técnica](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Technical_Documentation.md), [recorrido del proyecto](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Project_Journey.md), [ciclo de vida](https://github.com/SmartPotTech/.github/blob/main/docs/SmartPot_Software_Lifecycle.md) y [diagramas generales](https://github.com/SmartPotTech/.github/blob/main/docs/README.md#diagramas-generales) |
-| Mantenimiento | Se genera desde `docs/` de este repositorio con las herramientas de `.github/docs/tools`; se actualiza con cada cambio del componente |
-
-<!-- parte: PARTE I | El componente -->
-
-### 1. Propósito
-
-#### En palabras simples
-
-SmartPot-IoT-Python es el programa que corre en el dispositivo de un **cultivo real**: un ESP32 con sus sensores, sus actuadores y una pantalla. Mide, muestra, publica las lecturas en el broker de SmartPot y obedece las órdenes que llegan, confirmando cada una. No decide nada por su cuenta: la API y la IA de la plataforma deciden. El mismo firmware corre en una placa física o en [Wokwi](https://wokwi.com/projects/408863167711709185), y en los dos casos el cultivo es real para la plataforma; los cultivos virtuales, en cambio, los simula SmartPot-DataGenerator.
-
-### 2. Arquitectura del componente
-
-| Componente | Pin ESP32 | Escala enviada |
-| --- | --- | --- |
-| DHT22 (temperatura y humedad del aire) | GPIO 15 | °C y % |
-| Sensor de luz (potenciómetro en Wokwi) | GPIO 34 | 0–2000 lux |
-| Sensor de pH | GPIO 35 | 0–14 |
-| Sensor de TDS | GPIO 32 | 0–3000 ppm |
-| Humedad del sustrato | GPIO 33 | 0–100 % |
-| Bomba de agua | GPIO 19 | `WATER_PUMP` |
-| Luz ultravioleta | GPIO 18 | `UV_LIGHT` |
-| Ventilador | GPIO 5 | `FAN` |
-| LCD 20×4 I2C | SCL 16 · SDA 17 | — |
-
-<!-- parte: PARTE II | Funcionamiento -->
-
-### 3. Ciclo principal
-
-El ciclo se ejecuta cada 0,5 segundos con o sin red: apaga los actuadores cuya duración venció, lee sensores cada `interval_seconds`, actualiza la pantalla LCD y, cuando está conectado al broker, publica telemetría y atiende comandos.
-
-### 4. Comandos
-
-Recibe comandos JSON en `smartpot/v1/{cropId}/commands`, acciona los pines correspondientes en `ActuatorBank` y responde en `smartpot/v1/{cropId}/commands/ack` con estado `EXECUTED` o `FAILED` y mensaje en inglés.
-
-### 5. Telemetría, capacidades y validación de comandos
-
-- **Telemetría**: JSON v1 con seis campos (`temperature`, `humidity`, `brightness`, `ph`, `tds`, `soilMoisture`). `brightness` y `tds` son enteros; `ph` conserva dos decimales y el resto uno. Los sensores ausentes se omiten, nunca se envían como `null`.
-- **Capacidades**: después de `status=online` y antes de suscribirse a `commands`, el cliente publica un mensaje retenido QoS 1 en `.../capabilities`. Usa el esquema 1, declara el firmware `smartpot-iot-python/2.0.0`, el hardware `esp32-devkit-c-v4`, telemetría solo `json-v1`, seis sensores (sin `atmosphere`) y tres actuadores (`WATER_PUMP`, `UV_LIGHT`, `FAN`). La carga ocupa menos de 2 KB; un fallo al publicar no bloquea la suscripción a comandos.
-- **Ids de comando**: `parse_command` exige que `id` sea una cadena no vacía; se rechazan null, booleanos, números, listas y objetos. `actuator` y `action` deben ser cadenas no vacías, y `durationSeconds` debe ser un entero no negativo o estar ausente.
-- **Deduplicación**: `ActuatorBank` guarda los últimos 16 ids con su ACK. Una reentrega QoS 1 repite el ACK guardado sin accionar el pin; se cachean tanto los éxitos como los fallos.
-
-### 6. Conexión segura
-
-| Parámetro | Valor |
-| --- | --- |
-| Broker | `mqtt.smartpot.app:8883`, MQTT sobre TLS 1.2 o superior |
-| Certificado | Firmado por la CA propia de SmartPot; el firmware lo verifica con la CA pública que trae `config.json` en `BROKER["CA_CRT"]` |
-| Usuario y clave | El id del cultivo y la clave del dispositivo, que la PWA muestra una sola vez al crear el cultivo real o al rotarla |
-| Client id | `smartpot-<cropId>` |
-| Estado | `online` retenido al conectar y `offline` como última voluntad |
-
-> [!WARNING]
-> **Wokwi.** Deja tu copia del proyecto como privada: quien vea `config.json` puede publicar como tu cultivo. Si se filtra, genera una nueva clave desde la pestaña Dispositivo.
-
-<!-- parte: PARTE III | Operación -->
-
-### 7. Configuración
-
-La PWA genera `config.json` en su guía de conexión, con la red WiFi (la tuya o `Wokwi-GUEST`), el bloque `SMARTPOT` del cultivo y el bloque `BROKER` con la CA del broker. `config.json` no se versiona; `config.example.json` es la plantilla, y el firmware Rust lee el mismo archivo al compilar.
-
-| Clave | Uso |
-| --- | --- |
-| `WIFI.ssid`, `WIFI.password` | Red a la que se conecta el ESP32 |
-| `SMARTPOT.crop_id`, `device_key` | Cuenta MQTT del cultivo real |
-| `SMARTPOT.host`, `port`, `tls` | Broker y uso de TLS |
-| `BROKER.CA_CRT` | CA pública de SmartPot en PEM; con ella el firmware verifica el certificado del broker |
-| `SMARTPOT.interval_seconds` | Segundos entre lecturas (30 por defecto) |
-
-### 8. Pruebas
-
-`uv run ruff check .` y `uv run pytest`: una suite de 72 pruebas con CPython y módulos de MicroPython simulados sobre el contrato MQTT, la telemetría entera, las capacidades, los ids de comando estrictos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores, la escala de los sensores, la verificación del broker con la CA de la plantilla y el respaldo de TLS en versiones anteriores de MicroPython.
-
-### 9. Puesta en marcha
-
-| Dónde | Pasos |
-| --- | --- |
-| Placa física | Arma el circuito, graba MicroPython 1.24.1 (funciona desde 1.22), copia `fs/` con `mpremote`, agrega tu `config.json` (ya trae la CA) y enciende |
-| Wokwi en el navegador | Abre el proyecto, crea `config.json` con el bloque de la guía y ejecuta; la red `Wokwi-GUEST` tiene salida a internet |
-| Wokwi local | `uv sync`, inicia la simulación con `wokwi.toml` y ejecuta `uv run python start.py` |
