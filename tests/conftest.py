@@ -137,6 +137,7 @@ machine = types.ModuleType("machine")
 machine.Pin = FakePin
 machine.ADC = FakeADC
 machine.I2C = lambda *args, **kwargs: None
+machine.SoftI2C = lambda *args, **kwargs: None
 dht = types.ModuleType("dht")
 dht.DHT22 = FakeDHT22
 umqtt = types.ModuleType("umqtt")

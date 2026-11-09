@@ -1,5 +1,5 @@
 from i2c_lcd import I2cLcd
-from machine import I2C, Pin
+from machine import Pin, SoftI2C
 
 # Glifos de la ROM A00 del HD44780 («｡», «･», «ロ»): un punto que crece. La ROM no tiene «\», que se ve como «¥».
 SPINNER = "\xa1\xa5\xdb"
@@ -25,7 +25,8 @@ class LCDDisplay:
     """20x4 I2C LCD display. The HD44780 controller uses ASCII characters without accents."""
 
     def __init__(self, scl_pin, sda_pin, address=0x27, rows=4, cols=20, freq=400000):
-        self.i2c = I2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=freq)
+        # SoftI2C es el mismo bus por software que antes daba I2C(-1) sin el aviso de obsoleto.
+        self.i2c = SoftI2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=freq)
         self.lcd = I2cLcd(self.i2c, address, rows, cols)
         self.cols = cols
         for location, icon in enumerate(ICONS):
