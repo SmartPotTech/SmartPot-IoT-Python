@@ -44,9 +44,14 @@ def timestamp(moment):
     return "{}-{:02d}-{:02d} {:02d}:{:02d}:{:02d} UTC".format(*moment[:6])
 
 
+def _pad(text, width):
+    # MicroPython rellena los formatos por bytes: "°" ocupa dos en UTF-8 y la fila salía corta.
+    return text + " " * (width - len(text))
+
+
 def format_row(label, value, unit):
     text = "--" if value is None else "{:.2f} {}".format(value, unit).strip()
-    return "| {:<14} | {:<14} |".format(label, text)
+    return "| " + _pad(label, 14) + " | " + _pad(text, 14) + " |"
 
 
 def print_table(readings, moment=None):

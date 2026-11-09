@@ -64,6 +64,8 @@ def test_sensor_failures_return_none():
 def test_console_table_rows():
     assert format_row("pH", 6.1234, "") == "| pH             | 6.12           |"
     assert format_row("Light", None, "lux") == "| Light          | --             |"
+    # Mismo ancho que el separador aunque la unidad no sea ASCII.
+    assert format_row("Temperature", 24, "°C") == "| Temperature    | 24.00 °C       |"
 
 
 def test_console_table_tells_when_the_reading_was_taken(capsys):
