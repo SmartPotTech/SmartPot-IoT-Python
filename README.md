@@ -15,7 +15,7 @@
 
 ### Description
 
-SmartPot-IoT-Python is the **MicroPython firmware companion for rapid prototyping and simulation**: MicroPython 1.24.1 on an ESP32 (supported since 1.22), simulated in [Wokwi](https://wokwi.com/projects/408863167711709185) or flashed onto a physical board. For production physical deployments, see the canonical [SmartPot-IoT](https://github.com/SmartPotTech/SmartPot-IoT) Rust `no_std` firmware. It reads sensors, displays values on an LCD screen, publishes telemetry over **MQTT over TLS**, and executes commands arriving from SmartPot while acknowledging each one. If the network drops, it continues measuring, displaying, and turning off active actuators on schedule.
+SmartPot-IoT-Python is the **MicroPython firmware companion for rapid prototyping and simulation**: MicroPython 1.22.0 on an ESP32 (1.23+ is supported too, but newer images restarted in Wokwi), simulated in [Wokwi](https://wokwi.com/projects/408863167711709185) or flashed onto a physical board. For production physical deployments, see the canonical [SmartPot-IoT](https://github.com/SmartPotTech/SmartPot-IoT) Rust `no_std` firmware. It reads sensors, displays values on an LCD screen, publishes telemetry over **MQTT over TLS**, and executes commands arriving from SmartPot while acknowledging each one. If the network drops, it continues measuring, displaying, and turning off active actuators on schedule.
 
 With a physical board or Wokwi, the crop is **real** to SmartPot: its readings come from this firmware and train continuous learning. No hardware or Wokwi open? Create a **virtual crop** in the PWA—it is simulated by [SmartPot-DataGenerator](https://github.com/SmartPotTech/SmartPot-DataGenerator) using the same contract and cannot be converted into a real crop later.
 
@@ -58,8 +58,8 @@ SmartPot-IoT/
 │   ├── config.example.json  # Template for config.json (untracked) with embedded broker CA
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # CPython tests with simulated MicroPython modules
-├── diagram.json             # Wokwi circuit with MicroPython 1.24.1
-├── wokwi.toml               # Local simulation with ESP32_GENERIC-20241129-v1.24.1.bin
+├── diagram.json             # Wokwi circuit with MicroPython 1.22.0
+├── wokwi.toml               # Local simulation with ESP32_GENERIC-20231227-v1.22.0.bin
 ├── start.py                 # Runs the firmware in local simulation via mpremote
 └── pyproject.toml / uv.lock # Development tooling (mpremote, pytest, ruff)
 ```
@@ -136,7 +136,7 @@ Fill in `WIFI`, `crop_id`, and `device_key` (the guide values) in `config.json`;
 
 #### 3a. Browser Simulation
 
-Open the Wokwi project, replace its files with those in `fs/` (including your `config.json` with the CA) and `diagram.json` (which uses MicroPython 1.24.1), and run. The `Wokwi-GUEST` network has Internet access. If your copy still uses MicroPython 1.22, the firmware also works and verifies the broker.
+Open the Wokwi project, replace its files with those in `fs/` (including your `config.json` with the CA) and `diagram.json` (which uses MicroPython 1.22.0, the same image as `wokwi.toml`), and run. The `Wokwi-GUEST` network has Internet access. The firmware also runs and verifies the broker on 1.23 or newer, but those images kept restarting in Wokwi.
 
 #### 3b. Local Simulation (VS Code or wokwi-cli)
 
@@ -155,7 +155,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-The suite contains 78 tests and verifies the MQTT contract against the shared v1 fixture (sensor/actuator names and the legacy `LIGHTS` alias), integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
+The suite contains 132 tests and verifies the MQTT contract against the shared v1 fixture (sensor/actuator names and the legacy `LIGHTS` alias), integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
 
 ### Documentation
 
@@ -183,7 +183,7 @@ This project is licensed under the MIT License.
 
 ### Descripción
 
-SmartPot-IoT-Python es el **firmware compañero en MicroPython para prototipado rápido y simulación**: MicroPython 1.24.1 sobre un ESP32 (funciona desde 1.22), simulado en [Wokwi](https://wokwi.com/projects/408863167711709185) o grabado en una placa física. Para despliegues físicos en producción, consulta el firmware canónico en Rust `no_std` [SmartPot-IoT](https://github.com/SmartPotTech/SmartPot-IoT). Lee los sensores, muestra los valores en una pantalla LCD, publica la telemetría por **MQTT sobre TLS** y ejecuta los comandos que llegan desde SmartPot, confirmando cada uno. Si se cae la red, sigue midiendo, mostrando y apagando a tiempo lo que esté encendido.
+SmartPot-IoT-Python es el **firmware compañero en MicroPython para prototipado rápido y simulación**: MicroPython 1.22.0 sobre un ESP32 (también admite 1.23 o posterior, pero esas imágenes se reiniciaban en Wokwi), simulado en [Wokwi](https://wokwi.com/projects/408863167711709185) o grabado en una placa física. Para despliegues físicos en producción, consulta el firmware canónico en Rust `no_std` [SmartPot-IoT](https://github.com/SmartPotTech/SmartPot-IoT). Lee los sensores, muestra los valores en una pantalla LCD, publica la telemetría por **MQTT sobre TLS** y ejecuta los comandos que llegan desde SmartPot, confirmando cada uno. Si se cae la red, sigue midiendo, mostrando y apagando a tiempo lo que esté encendido.
 
 Con placa o en Wokwi, el cultivo es **real** para SmartPot: sus lecturas vienen de este firmware y entrenan el aprendizaje continuo. ¿Sin hardware ni Wokwi abierto? Crea en la PWA un **cultivo virtual**: lo simula [SmartPot-DataGenerator](https://github.com/SmartPotTech/SmartPot-DataGenerator) con el mismo contrato, y no se puede convertir en real después.
 
@@ -226,8 +226,8 @@ SmartPot-IoT/
 │   ├── config.example.json  # Plantilla de config.json (no se versiona) con la CA del broker en texto
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # Pruebas con CPython y módulos de MicroPython simulados
-├── diagram.json             # Circuito de Wokwi con MicroPython 1.24.1
-├── wokwi.toml               # Simulación local con ESP32_GENERIC-20241129-v1.24.1.bin
+├── diagram.json             # Circuito de Wokwi con MicroPython 1.22.0
+├── wokwi.toml               # Simulación local con ESP32_GENERIC-20231227-v1.22.0.bin
 ├── start.py                 # Ejecuta el firmware en la simulación local con mpremote
 └── pyproject.toml / uv.lock # Herramientas de desarrollo (mpremote, pytest, ruff)
 ```
@@ -310,7 +310,7 @@ Completa en `config.json` `WIFI`, `crop_id` y `device_key` (los valores de la gu
 
 #### 3a. Simulación en el navegador
 
-Abre el proyecto de Wokwi, reemplaza sus archivos por los de `fs/` (con tu `config.json`, que ya trae la CA) y por el `diagram.json`, que usa MicroPython 1.24.1, y ejecuta. La red `Wokwi-GUEST` tiene salida a Internet. Si tu copia sigue en MicroPython 1.22, el firmware también funciona y verifica el broker.
+Abre el proyecto de Wokwi, reemplaza sus archivos por los de `fs/` (con tu `config.json`, que ya trae la CA) y por el `diagram.json`, que usa MicroPython 1.22.0 (la misma imagen que `wokwi.toml`), y ejecuta. La red `Wokwi-GUEST` tiene salida a Internet. El firmware también funciona y verifica el broker en 1.23 o posterior, pero esas imágenes se reiniciaban en Wokwi.
 
 #### 3b. Simulación local (VS Code o wokwi-cli)
 
@@ -329,7 +329,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-La suite contiene 78 pruebas y verifica el contrato MQTT contra la fixture v1 compartida (nombres de sensores y actuadores y el alias heredado `LIGHTS`), la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
+La suite contiene 132 pruebas y verifica el contrato MQTT contra la fixture v1 compartida (nombres de sensores y actuadores y el alias heredado `LIGHTS`), la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
 
 ### Documentación
 

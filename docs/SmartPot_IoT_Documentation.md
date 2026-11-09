@@ -166,13 +166,13 @@ The PWA generates `config.json` in its connection guide, containing the WiFi net
 
 ### 8. Tests
 
-`uv run ruff check .` and `uv run pytest`: a 72-test CPython suite with simulated MicroPython modules covering the MQTT contract, integer telemetry, capabilities, strict command ids, 16-id deduplication and ACKs (with durations in seconds, minutes, or hours), timed actuator shutoff, sensor scaling, broker verification with the template CA, and TLS fallback for older MicroPython versions.
+`uv run ruff check .` and `uv run pytest`: a 132-test CPython suite with simulated MicroPython modules covering the MQTT contract, integer telemetry, capabilities, strict command ids, 16-id deduplication and ACKs (with durations in seconds, minutes, or hours), timed actuator shutoff, sensor scaling, broker verification with the template CA, and TLS fallback for older MicroPython versions.
 
 ### 9. Getting Started
 
 | Environment | Steps |
 | --- | --- |
-| Physical board | Wire the circuit, flash MicroPython 1.24.1 (1.22+ works), copy `fs/` with `mpremote`, add your `config.json` (includes the CA), and power on |
+| Physical board | Wire the circuit, flash MicroPython 1.22.0 (1.23+ also works), copy `fs/` with `mpremote`, add your `config.json` (includes the CA), and power on |
 | Wokwi in browser | Open the project, create `config.json` with the guide's block, and run; the `Wokwi-GUEST` network has Internet access |
 | Local Wokwi | `uv sync`, start the simulation with `wokwi.toml`, and run `uv run python start.py` |
 
