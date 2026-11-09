@@ -189,11 +189,11 @@ Con placa o en Wokwi, el cultivo es **real** para SmartPot: sus lecturas vienen 
 
 ```mermaid
 flowchart LR
-  sensores["DHT22 · luz · pH<br/>TDS · sustrato"] --> esp["ESP32<br/>MicroPython"]
-  esp --> lcd["LCD 20x4<br/>lecturas y conexión"]
+  sensors["DHT22 · light · pH<br/>TDS · substrate"] --> esp["ESP32<br/>MicroPython"]
+  esp --> lcd["20x4 LCD<br/>readings & connection"]
   esp -->|"telemetry · status · ack"| broker["mqtt.smartpot.app:8883<br/>TLS"]
   broker -->|"commands"| esp
-  esp --> act["Bomba · Luz ultravioleta · Ventilador"]
+  esp --> act["Pump · UV Light · Fan"]
 ```
 
 ### Circuito
