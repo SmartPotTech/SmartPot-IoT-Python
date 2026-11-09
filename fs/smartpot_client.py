@@ -5,6 +5,8 @@ Formatting functions are hardware-independent and tested under CPython.
 
 import json
 
+from utils import describe_error, is_dns_error, is_tls_error
+
 TOPIC_PREFIX = "smartpot/v1"
 TELEMETRY_FIELDS = ("temperature", "humidity", "brightness", "ph", "tds", "soilMoisture", "atmosphere")
 DECIMALS = {"brightness": 0, "tds": 0, "ph": 2}
@@ -57,16 +59,31 @@ def capabilities_payload():
 # Rango de la API (`SmartPot-API`, validateDuration) y mensajes compartidos con el firmware Rust.
 MIN_DURATION_SECONDS = 1
 MAX_DURATION_SECONDS = 3600
+# Identificador más largo que aceptan los dos firmwares (un UUID; la API usa ObjectId de 24).
+MAX_COMMAND_ID_LENGTH = 36
+# Más allá de esto un actuador o una acción no son nombres del contrato.
+MAX_FIELD_LENGTH = 64
 MALFORMED = "Invalid command: id, actuator and action are required"
 INVALID_DURATION = "durationSeconds must be an integer between 1 and 3600"
+UNKNOWN_ACTUATOR = "Unknown actuator: "
+UNKNOWN_ACTION = "Unknown action: "
+# Actuadores del contrato v1 (los que esta placa no tiene se rechazan al ejecutar, con su nombre).
+CONTRACT_ACTUATORS = ("WATER_PUMP", "UV_LIGHT", "FAN", "HUMIDIFIER", "NUTRIENT_DOSER", "PH_DOSER")
+ACTIONS = ("ACTIVATE", "DEACTIVATE")
 ACK_QUEUE_SIZE = 16
 SOCKET_TIMEOUT_SECONDS = 15
+
+
+def _text(value):
+    return value.strip() if isinstance(value, str) and len(value) <= MAX_FIELD_LENGTH else ""
 
 
 def validate_command(payload):
     """Returns (command, command_id, reason): the command when valid, otherwise the id (if readable) and why.
 
-    A negative, zero, decimal or out-of-range duration is rejected instead of being read as "no duration".
+    Same checks and order as `parse_command` in the Rust firmware: id, required fields, actuator, action and
+    finally the duration. A negative, zero, decimal or out-of-range duration is rejected instead of being read
+    as "no duration".
     """
     try:
         if isinstance(payload, (bytes, bytearray)):
@@ -77,26 +94,29 @@ def validate_command(payload):
     if not isinstance(command, dict):
         return None, None, MALFORMED
     command_id = command.get("id")
-    # El id debe ser texto no vacío: None, booleanos, números, listas y diccionarios no valen.
-    if not isinstance(command_id, str) or not command_id.strip():
+    # El id debe ser texto no vacío y corto: None, booleanos, números, listas y diccionarios no valen.
+    if not isinstance(command_id, str) or not command_id.strip() or len(command_id) > MAX_COMMAND_ID_LENGTH:
         return None, None, MALFORMED
-    actuator = command.get("actuator")
-    action = command.get("action")
-    if not isinstance(actuator, str) or not isinstance(action, str) or not actuator.strip() or not action.strip():
+    actuator = _text(command.get("actuator")).upper()
+    action = _text(command.get("action")).upper()
+    if not actuator or not action:
         return None, command_id, MALFORMED
+    # `LIGHTS` es el alias heredado del contrato anterior; UV_LIGHT es el canónico.
+    if actuator == "LIGHTS":
+        actuator = "UV_LIGHT"
+    if actuator not in CONTRACT_ACTUATORS:
+        return None, command_id, UNKNOWN_ACTUATOR + actuator
+    if action not in ACTIONS:
+        return None, command_id, UNKNOWN_ACTION + action
     duration = command.get("durationSeconds")
     # Solo se admite None o un entero entre 1 y 3600; bool es subclase de int y se excluye.
     if duration is not None and (isinstance(duration, bool) or not isinstance(duration, int)
                                  or not MIN_DURATION_SECONDS <= duration <= MAX_DURATION_SECONDS):
         return None, command_id, INVALID_DURATION
-    # `LIGHTS` es el alias heredado del contrato anterior; UV_LIGHT es el canónico.
-    canonical_actuator = actuator.strip().upper()
-    if canonical_actuator == "LIGHTS":
-        canonical_actuator = "UV_LIGHT"
     return {
         "id": command_id,
-        "actuator": canonical_actuator,
-        "action": action.upper(),
+        "actuator": actuator,
+        "action": action,
         "durationSeconds": duration,
     }, command_id, None
 
@@ -146,26 +166,51 @@ def tls_client(factory, client_id, host, options, ca_data):
         return factory(client_id, host, ssl=context, **options)
 
 
-def refusal(error):
-    """Formats why the connection was refused when not a network error: device key or broker verification."""
-    detail = str(error).strip()
-    # umqtt.simple lanza MQTTException con el código del CONNACK; mbedtls, un error con el motivo de la verificación.
-    if type(error).__name__ == "MQTTException":
-        return "broker rejected the device key (code {})".format(detail)
-    return "could not verify the broker ({}): check the CA in config.json and the system clock".format(detail)
+class BrokerRefused(Exception):
+    """The broker answered the CONNECT with an error code."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+    @property
+    def key_rejected(self):
+        # MQTT 3.1.1: 4 usuario o clave incorrectos, 5 no autorizado (EMQX rechaza así la clave del dispositivo).
+        return self.code in (4, 5)
+
+
+def connect_failure(error, host):
+    """Why the connection failed, with the same words as the Rust firmware."""
+    if isinstance(error, BrokerRefused):
+        return "broker rejected the device key" if error.key_rejected else "broker refused the connection"
+    if is_dns_error(error):
+        return "could not resolve " + host
+    if isinstance(error, ValueError):
+        # MicroPython informa con ValueError el motivo de mbedtls al rechazar el certificado del broker.
+        return "could not verify the broker ({}): check the CA in config.json and the system clock".format(
+            str(error).strip())
+    if is_tls_error(error):
+        detail = str(error.args[1]) if len(error.args) > 1 else hex(error.args[0])
+        if "CONN_EOF" in detail or "NET_" in detail:
+            # El broker cortó el handshake (por ejemplo, por su tiempo límite): es un fallo de red.
+            return "connection closed by the broker"
+        return "could not verify the broker ({}): check the CA in config.json and the system clock".format(detail)
+    return describe_error(error)
 
 
 class TimeoutSocket:
-    """Socket wrapper that turns umqtt's blocking mode into a bounded timeout.
+    """Socket wrapper that turns umqtt's blocking mode into a bounded timeout and counts incoming data.
 
     umqtt.simple switches the socket to blocking mode to read the rest of a packet and to wait for PUBACK; without
     a timeout a half-open connection would block the device forever. Here "blocking" means "wait at most
-    `timeout` seconds", so a dead link raises OSError and the device reconnects.
+    `timeout` seconds", so a dead link raises OSError and the device reconnects. `received` grows with every
+    byte from the broker, which is how an unanswered PINGREQ is detected.
     """
 
     def __init__(self, sock, timeout):
         self._sock = sock
         self._timeout = timeout
+        self.received = 0
         self._apply(timeout)
 
     def _apply(self, value):
@@ -179,6 +224,12 @@ class TimeoutSocket:
 
     def settimeout(self, value):
         self._apply(value)
+
+    def read(self, size):
+        data = self._sock.read(size)
+        if data:
+            self.received += len(data)
+        return data
 
     def __getattr__(self, name):
         return getattr(self._sock, name)
@@ -206,20 +257,23 @@ class SmartPotClient:
             self.client = client_factory(client_id, host, **options)
         self.client.set_callback(self._on_message)
         self.pending_acks = []
+        self.ping_mark = None
 
     def connect(self):
+        """Connects or raises: BrokerRefused when the broker answered with an error code, else the original error."""
         self.client.set_last_will(self.topics["status"], b"offline", retain=True, qos=1)
+        self.ping_mark = None
         try:
             self.client.connect()
         except OSError:
             raise
         except Exception as error:
-            if type(error).__name__ == "MQTTException":
-                # El broker respondió: el TLS se verificó y rechazó la clave del dispositivo.
-                if self.use_tls:
-                    print("SMARTPOT-TLS-OK host={}".format(self.host))
-                print("SMARTPOT-MQTT-REFUSED")
-            raise OSError(refusal(error))
+            if type(error).__name__ != "MQTTException":
+                raise
+            # El broker respondió: el TLS ya se verificó y el CONNACK trae el código del rechazo.
+            if self.use_tls:
+                print("SMARTPOT-TLS-OK host={}".format(self.host))
+            raise BrokerRefused(error.args[0] if error.args else 0)
         if self.use_tls:
             print("SMARTPOT-TLS-OK host={}".format(self.host))
         self.client.publish(self.topics["status"], b"online", retain=True, qos=1)
@@ -238,8 +292,16 @@ class SmartPotClient:
         self.flush_acks()
 
     def ping(self):
-        """Sends PINGREQ so the broker keeps the session alive even without telemetry."""
+        """Sends PINGREQ; raises OSError if the previous one got no answer (half-open connection).
+
+        Like the Rust firmware, the check happens at the next ping: any byte from the broker since then counts.
+        """
+        sock = getattr(self.client, "sock", None)
+        received = getattr(sock, "received", None)
+        if self.ping_mark is not None and received is not None and received == self.ping_mark:
+            raise OSError("no PINGRESP from the broker")
         self.client.ping()
+        self.ping_mark = received
 
     def publish_telemetry(self, readings):
         self.client.publish(self.topics["telemetry"], telemetry_payload(readings).encode())
@@ -274,13 +336,14 @@ class SmartPotClient:
             return
         try:
             sock.close()
-        except OSError as error:
-            print("Socket was already closed:", error)
+        except OSError:
+            # Un socket ya cerrado no impide reconectar.
+            return
 
     def _on_message(self, topic, message):
         command, command_id, reason = validate_command(message)
         if command is None:
-            print("Unreadable command discarded:", reason)
+            print("Command rejected:", reason)
             if command_id is not None:
                 self.acknowledge(command_id, False, reason)
             return

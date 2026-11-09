@@ -61,8 +61,16 @@ class BrokenScreen:
         raise OSError(110, "ETIMEDOUT")
 
 
+class Sensors:
+    def sample(self, now):
+        pass
+
+    def snapshot(self, now):
+        return {"ph": 6.1}
+
+
 def device(client, screen=None, actuators=None, **options):
-    return Device(lambda: {"ph": 6.1}, actuators or bank(), screen or NullDisplay(), client, Link(), 30, **options)
+    return Device(Sensors(), actuators or bank(), screen or NullDisplay(), client, Link(), 30, **options)
 
 
 def test_pump_without_duration_gets_the_safety_cap_but_uv_light_does_not():
@@ -159,10 +167,32 @@ def test_resilient_display_survives_a_missing_lcd_and_reprobes_it():
 
     screen = ResilientDisplay(factory)
     assert isinstance(screen.display, NullDisplay)
-    for _ in range(10):
-        screen.show_readings({"ph": 6.1}, {}, online=False)
-    assert isinstance(screen.display, LCDDisplay)
+    screen.show_readings({"ph": 6.1}, {}, online=False)
+    screen.tick(0)
+    assert isinstance(screen.display, LCDDisplay) and screen.recovered
     assert isinstance(screen.display.lcd, FakeLcd)
+
+
+def test_a_lost_lcd_is_reported_once_per_loss(capsys):
+    failing = [True]
+
+    def factory():
+        if failing[0]:
+            raise OSError(19, "ENODEV")
+        return LCDDisplay(scl_pin=16, sda_pin=17)
+
+    screen = ResilientDisplay(factory)
+    screen.tick(0)
+    screen.tick(10)
+    assert capsys.readouterr().out == "LCD not available at 0x27\n"
+    failing[0] = False
+    screen.tick(19)
+    assert isinstance(screen.display, NullDisplay)
+    screen.tick(20)
+    assert isinstance(screen.display, LCDDisplay)
+    screen.display = BrokenScreen()
+    screen.show_readings({"ph": 6.1}, {}, online=False)
+    assert capsys.readouterr().out == "LCD not available at 0x27\n"
 
 
 def test_lcd_rows_are_only_rewritten_when_they_change(capsys):

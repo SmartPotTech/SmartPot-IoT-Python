@@ -1,3 +1,4 @@
+import errno
 import json
 import pathlib
 import ssl
@@ -6,9 +7,12 @@ import pytest
 
 from conftest import FakeMQTTClient, LegacyMQTTClient
 from smartpot_client import (
+    BrokerRefused,
     SmartPotClient,
+    TimeoutSocket,
     ack_payload,
     capabilities_payload,
+    connect_failure,
     parse_command,
     telemetry_payload,
     topics,
@@ -222,11 +226,54 @@ class UnverifiedMQTTClient(FakeMQTTClient):
 
 def test_a_refused_key_is_reported_as_a_connection_error():
     smartpot = client(client_factory=RefusedMQTTClient)
-    with pytest.raises(OSError, match=r"rejected the device key \(code 5\)"):
+    with pytest.raises(BrokerRefused) as refused:
         smartpot.connect()
+    assert refused.value.key_rejected
+    assert connect_failure(refused.value, "mqtt.smartpot.app") == "broker rejected the device key"
 
 
 def test_a_broker_that_fails_verification_points_to_the_ca():
     smartpot = client(client_factory=UnverifiedMQTTClient)
-    with pytest.raises(OSError, match=r"\(The certificate is not correctly signed by the trusted CA\): check the CA"):
+    with pytest.raises(ValueError) as failure:
         smartpot.connect()
+    assert connect_failure(failure.value, "mqtt.smartpot.app") == (
+        "could not verify the broker (The certificate is not correctly signed by the trusted CA): "
+        "check the CA in config.json and the system clock")
+
+
+@pytest.mark.parametrize(("error", "reason"), [
+    (OSError(-202), "could not resolve mqtt.smartpot.app"),
+    (OSError(errno.ETIMEDOUT), "timed out"),
+    (OSError(errno.ECONNRESET), "connection reset"),
+    (OSError(-29312, "MBEDTLS_ERR_SSL_CONN_EOF"), "connection closed by the broker"),
+    (OSError(-9984, "MBEDTLS_ERR_X509_CERT_VERIFY_FAILED"),
+     "could not verify the broker (MBEDTLS_ERR_X509_CERT_VERIFY_FAILED): check the CA in config.json and the "
+     "system clock"),
+    (BrokerRefused(3), "broker refused the connection"),
+])
+def test_connection_failures_use_the_words_of_the_rust_firmware(error, reason):
+    assert connect_failure(error, "mqtt.smartpot.app") == reason
+
+
+class FakeSocket:
+    data = b""
+
+    def settimeout(self, value):
+        self.timeout = value
+
+    def read(self, size):
+        data, self.data = self.data[:size], self.data[size:]
+        return data
+
+
+def test_an_unanswered_ping_means_a_dead_connection():
+    smartpot = client()
+    smartpot.connect()
+    smartpot.client.sock = TimeoutSocket(FakeSocket(), 15)
+    smartpot.client.ping = lambda: None
+    smartpot.ping()
+    smartpot.client.sock._sock.data = b"\xd0\x00"
+    smartpot.client.sock.read(2)
+    smartpot.ping()
+    with pytest.raises(OSError, match="no PINGRESP from the broker"):
+        smartpot.ping()

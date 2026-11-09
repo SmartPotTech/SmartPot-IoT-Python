@@ -1,6 +1,16 @@
+import pytest
+
 from actuators import Actuator, ActuatorBank
 from conftest import FakeADC, FakeDHT22
-from sensors import AtmosphereSensor, LightSensor, PHSensor, SoilMoistureSensor, TDSSensor
+from sensors import (
+    AtmosphereSensor,
+    LightSensor,
+    PHSensor,
+    SensorError,
+    SensorHub,
+    SoilMoistureSensor,
+    TDSSensor,
+)
 from utils import clock_ready, format_row, print_table, timestamp
 
 
@@ -44,21 +54,41 @@ def test_unknown_actuators_and_actions_fail():
     assert actuators.execute({"actuator": "FAN", "action": "BLINK"}, 0)[0] is False
 
 
-def test_analog_sensors_use_the_device_scale():
-    FakeADC.readings = {34: 65535, 35: 32768, 32: 0, 33: 16384}
+def test_analog_sensors_use_the_exact_12_bit_scale():
+    FakeADC.readings = {34: 4095, 35: 2048, 32: 0, 33: 1024}
     assert LightSensor(34).read() == 2000
-    assert round(PHSensor(35).read(), 1) == 7.0
+    assert PHSensor(35).read() == 2048 * 14.0 / 4095
     assert TDSSensor(32).read() == 0
-    assert round(SoilMoistureSensor(33).read()) == 25
+    assert SoilMoistureSensor(33).read() == 1024 * 100.0 / 4095
 
 
-def test_sensor_failures_return_none():
+def test_sensor_failures_have_the_reasons_of_the_rust_driver():
     FakeADC.readings = {34: None}
     assert LightSensor(34).read() is None
-    FakeDHT22.fail = True
-    assert AtmosphereSensor(15).read() == {"temperature": None, "humidity": None}
+    for failure, reason in ((True, "no response"), ("checksum", "checksum mismatch")):
+        FakeDHT22.fail = failure
+        with pytest.raises(SensorError, match=reason):
+            AtmosphereSensor(15).read()
     FakeDHT22.fail = False
-    assert AtmosphereSensor(15).read() == {"temperature": 23.5, "humidity": 61.0}
+    assert AtmosphereSensor(15).read() == (23.5, 61.0)
+
+
+def test_readings_stay_valid_for_three_sampling_periods(capsys):
+    FakeADC.readings = {34: 4095}
+    FakeDHT22.fail = False
+    hub = SensorHub(AtmosphereSensor(15), {"brightness": LightSensor(34)})
+    hub.sample(0)
+    FakeDHT22.fail = True
+    FakeADC.readings = {34: None}
+    for now in (2, 4, 6):
+        hub.sample(now)
+    assert hub.snapshot(6)["temperature"] == 23.5 and hub.snapshot(6)["brightness"] == 2000
+    capsys.readouterr()
+    hub.sample(8)
+    readings = hub.snapshot(8)
+    FakeDHT22.fail = False
+    assert readings["temperature"] is None and readings["humidity"] is None and readings["brightness"] is None
+    assert capsys.readouterr().out == "Error reading DHT22: no response\n"
 
 
 def test_console_table_rows():

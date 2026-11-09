@@ -1,5 +1,6 @@
 """Simulated MicroPython modules for testing the firmware under CPython."""
 
+import errno
 import pathlib
 import sys
 import types
@@ -28,6 +29,8 @@ class FakePin:
 
 
 class FakeADC:
+    """ADC of the ESP32: `read()` returns the raw 12-bit value (0..4095) that the firmware scales itself."""
+
     ATTN_11DB = 3
     readings: dict[int, int] = {}
 
@@ -37,7 +40,7 @@ class FakeADC:
     def atten(self, value):
         self.attenuation = value
 
-    def read_u16(self):
+    def read(self):
         value = FakeADC.readings.get(self.pin.number, 0)
         if value is None:
             raise OSError("no reading")
@@ -45,14 +48,17 @@ class FakeADC:
 
 
 class FakeDHT22:
+    # False, "timeout" (sin respuesta) o "checksum" (trama dañada), como el módulo dht de MicroPython.
     fail = False
 
     def __init__(self, pin):
         self.pin = pin
 
     def measure(self):
+        if FakeDHT22.fail == "checksum":
+            raise Exception("checksum error")
         if FakeDHT22.fail:
-            raise OSError("DHT22 not responding")
+            raise OSError(errno.ETIMEDOUT)
 
     def temperature(self):
         return 23.5

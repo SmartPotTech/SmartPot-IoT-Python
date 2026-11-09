@@ -43,15 +43,18 @@ class Actuator:
         self.active = True
         self.on_since = now
         self.until = now + duration if duration else None
-        print("SMARTPOT-ACT", self.key, "ON", "{}s".format(duration) if duration else "")
+        if duration:
+            print("SMARTPOT-ACT", self.key, "ON", "{}s".format(duration))
+        else:
+            print("SMARTPOT-ACT", self.key, "ON")
 
-    def turn_off(self, reason="command"):
+    def turn_off(self, reason="command", announce=True):
         was_active = self.active
         self._drive(False)
         self.active = False
         self.until = None
         self.on_since = None
-        if was_active:
+        if was_active and announce:
             print("SMARTPOT-ACT", self.key, "OFF", reason)
 
     def tick(self, now):
@@ -113,9 +116,11 @@ class ActuatorBank:
             if now - since >= self.offline_cutoff:
                 actuator.turn_off("failsafe")
 
-    def all_off(self, reason="safety"):
+    def all_off(self, reason="safety", announce=True):
+        """Turns every output off. Emergency stops pass announce=False: the SMARTPOT-FATAL line says it all,
+        as in the Rust firmware, whose panic handler clears the GPIO register without printing."""
         for actuator in self.actuators.values():
-            actuator.turn_off(reason)
+            actuator.turn_off(reason, announce)
 
     def states(self):
         return {name: actuator.active for name, actuator in self.actuators.items()}
