@@ -12,3 +12,6 @@ pytest-cache-files-*
 .vscode
 .DS_Store
 Thumbs.db
+
+# Imagen de flash para Wokwi: lleva config.json con la clave del dispositivo.
+build/
