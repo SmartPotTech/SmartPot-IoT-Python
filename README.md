@@ -59,9 +59,10 @@ SmartPot-IoT/
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # CPython tests with simulated MicroPython modules
 ├── diagram.json             # Wokwi circuit with MicroPython 1.22.0
-├── wokwi.toml               # Local simulation with ESP32_GENERIC-20231227-v1.22.0.bin
-├── start.py                 # Runs the firmware in local simulation via mpremote
-└── pyproject.toml / uv.lock # Development tooling (mpremote, pytest, ruff)
+├── wokwi.toml               # Local simulation: build/flasher_args.json (MicroPython 1.22.0 + fs/)
+├── tools/build_flash.py     # Builds build/ with fs/ and config.json in MicroPython's LittleFS
+├── start.py                 # Alternative: mounts fs/ via mpremote without rebuilding the image
+└── pyproject.toml / uv.lock # Development tooling (littlefs-python, mpremote, pytest, ruff)
 ```
 
 ### MQTT Contract
@@ -138,15 +139,21 @@ Fill in `WIFI`, `crop_id`, and `device_key` (the guide values) in `config.json`;
 
 Open the Wokwi project, replace its files with those in `fs/` (including your `config.json` with the CA) and `diagram.json` (which uses MicroPython 1.22.0, the same image as `wokwi.toml`), and run. The `Wokwi-GUEST` network has Internet access. The firmware also runs and verifies the broker on 1.23 or newer, but those images kept restarting in Wokwi.
 
-#### 3b. Local Simulation (VS Code or wokwi-cli)
+#### 3b. Local Simulation (Wokwi in the IDE or wokwi-cli)
 
 ```bash
 uv sync
-# start the Wokwi simulation in VS Code (uses wokwi.toml) and then:
-uv run python start.py
+cp config.example.json fs/config.json   # once; or the block from the connection guide
+uv run python tools/build_flash.py      # again after every change in fs/
+# start the Wokwi simulation: it boots straight into main.py
 ```
 
-`start.py` mounts the `fs` folder onto the simulated ESP32 via `mpremote` and executes `main.py`.
+`tools/build_flash.py` writes `build/flasher_args.json`: the official MicroPython 1.22.0 image at `0x1000` and a
+LittleFS image with `fs/*.py` and `fs/config.json` at `0x200000`, the offset of the `vfs` partition. MicroPython
+mounts it at boot and runs `main.py` by itself, like the Rust firmware with its ELF. `build/` is not versioned because
+it carries the device key. To try a change without rebuilding, start the simulation and run `uv run python start.py`
+once the console shows `>>>` or the firmware is running: it stops `main.py`, mounts `fs/` via `mpremote` (port 4000)
+and runs it from your computer.
 
 #### Tests
 
@@ -155,7 +162,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-The suite contains 132 tests and verifies the MQTT contract against the shared v1 fixture (sensor/actuator names and the legacy `LIGHTS` alias), integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
+The suite contains 135 tests and verifies the MQTT contract against the shared v1 fixture (sensor/actuator names and the legacy `LIGHTS` alias), integer telemetry and capability declaration, strict command validation, 16-id deduplication and ACK handling, timed actuator shutoff (including offline), offline loop and retry intervals, sensor scaling, LCD display, console timestamp table, and broker verification with the DER CA under both MicroPython 1.22 and 1.23+ `umqtt.simple` signatures.
 
 ### Documentation
 
@@ -227,9 +234,10 @@ SmartPot-IoT/
 │   └── i2c_lcd.py, lcd_api.py
 ├── tests/                   # Pruebas con CPython y módulos de MicroPython simulados
 ├── diagram.json             # Circuito de Wokwi con MicroPython 1.22.0
-├── wokwi.toml               # Simulación local con ESP32_GENERIC-20231227-v1.22.0.bin
-├── start.py                 # Ejecuta el firmware en la simulación local con mpremote
-└── pyproject.toml / uv.lock # Herramientas de desarrollo (mpremote, pytest, ruff)
+├── wokwi.toml               # Simulación local: build/flasher_args.json (MicroPython 1.22.0 + fs/)
+├── tools/build_flash.py     # Genera build/ con fs/ y config.json en el LittleFS de MicroPython
+├── start.py                 # Alternativa: monta fs/ con mpremote sin regenerar la imagen
+└── pyproject.toml / uv.lock # Herramientas de desarrollo (littlefs-python, mpremote, pytest, ruff)
 ```
 
 ### Contrato MQTT
@@ -312,15 +320,21 @@ Completa en `config.json` `WIFI`, `crop_id` y `device_key` (los valores de la gu
 
 Abre el proyecto de Wokwi, reemplaza sus archivos por los de `fs/` (con tu `config.json`, que ya trae la CA) y por el `diagram.json`, que usa MicroPython 1.22.0 (la misma imagen que `wokwi.toml`), y ejecuta. La red `Wokwi-GUEST` tiene salida a Internet. El firmware también funciona y verifica el broker en 1.23 o posterior, pero esas imágenes se reiniciaban en Wokwi.
 
-#### 3b. Simulación local (VS Code o wokwi-cli)
+#### 3b. Simulación local (Wokwi en el IDE o wokwi-cli)
 
 ```bash
 uv sync
-# inicia la simulación de Wokwi en VS Code (usa wokwi.toml) y luego:
-uv run python start.py
+cp config.example.json fs/config.json   # una vez; o el bloque de la guía de conexión
+uv run python tools/build_flash.py      # otra vez tras cada cambio en fs/
+# inicia la simulación de Wokwi: arranca directamente en main.py
 ```
 
-`start.py` monta la carpeta `fs` en el ESP32 simulado con `mpremote` y ejecuta `main.py`.
+`tools/build_flash.py` escribe `build/flasher_args.json`: la imagen oficial de MicroPython 1.22.0 en `0x1000` y una
+imagen LittleFS con `fs/*.py` y `fs/config.json` en `0x200000`, el offset de la partición `vfs`. MicroPython la monta
+al arrancar y ejecuta `main.py` solo, como el firmware Rust con su ELF. `build/` no se versiona porque lleva la clave del
+dispositivo. Para probar un cambio sin regenerar la imagen, inicia la simulación y ejecuta `uv run python start.py`
+cuando la consola muestre `>>>` o el firmware ya esté corriendo: detiene `main.py`, monta `fs/` con `mpremote`
+(puerto 4000) y lo ejecuta desde tu computador.
 
 #### Pruebas
 
@@ -329,7 +343,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-La suite contiene 132 pruebas y verifica el contrato MQTT contra la fixture v1 compartida (nombres de sensores y actuadores y el alias heredado `LIGHTS`), la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
+La suite contiene 135 pruebas y verifica el contrato MQTT contra la fixture v1 compartida (nombres de sensores y actuadores y el alias heredado `LIGHTS`), la telemetría entera y la declaración de capacidades, la validación estricta de comandos, la deduplicación de los últimos 16 ids y el ACK, el apagado por tiempo de los actuadores (también sin conexión), el ciclo sin red con sus reintentos, la escala de los sensores, la pantalla, la tabla con la hora y la verificación del broker con la CA en DER, tanto con el `umqtt.simple` de MicroPython 1.22 como con el de 1.23 en adelante.
 
 ### Documentación
 
