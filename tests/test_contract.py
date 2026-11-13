@@ -63,7 +63,7 @@ def test_telemetry_formats_are_a_subset_of_the_contract():
 
 
 def test_telemetry_keys_are_part_of_the_contract():
-    readings = {key: 1.0 for key in ALL_SENSORS}
+    readings = {key: (1013.2 if key == "atmosphere" else 1.0) for key in ALL_SENSORS}
     payload = json.loads(telemetry_payload(readings))
 
     assert set(payload) == ALL_SENSORS

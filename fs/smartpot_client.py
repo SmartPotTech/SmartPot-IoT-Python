@@ -4,12 +4,23 @@ Formatting functions are hardware-independent and tested under CPython.
 """
 
 import json
+import math
 
 from utils import describe_error, is_dns_error, is_tls_error
 
 TOPIC_PREFIX = "smartpot/v1"
 TELEMETRY_FIELDS = ("temperature", "humidity", "brightness", "ph", "tds", "soilMoisture", "atmosphere")
 DECIMALS = {"brightness": 0, "tds": 0, "ph": 2}
+# Rangos físicos aceptados por la API y la base de datos: un sensor erróneo se omite para no invalidar el lote.
+API_RANGES = {
+    "temperature": (-20.0, 60.0),
+    "humidity": (0.0, 100.0),
+    "brightness": (0.0, 200000.0),
+    "ph": (0.0, 14.0),
+    "tds": (0.0, 10000.0),
+    "soilMoisture": (0.0, 100.0),
+    "atmosphere": (300.0, 1100.0),
+}
 
 
 def topics(crop_id, prefix=TOPIC_PREFIX):
@@ -27,11 +38,17 @@ def telemetry_payload(readings):
     data = {}
     for field in TELEMETRY_FIELDS:
         value = readings.get(field)
-        if value is None:
+        if value is None or isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        if math.isnan(value) or math.isinf(value):
             continue
         decimals = DECIMALS.get(field, 1)
         # Con 0 decimales el campo debe ser un entero JSON: 813, no 813.0.
-        data[field] = int(round(value)) if decimals == 0 else round(value, decimals)
+        rounded = int(round(value)) if decimals == 0 else round(value, decimals)
+        bounds = API_RANGES.get(field)
+        if bounds is not None and not (bounds[0] <= rounded <= bounds[1]):
+            continue
+        data[field] = rounded
     return json.dumps(data)
 
 
@@ -304,7 +321,10 @@ class SmartPotClient:
         self.ping_mark = received
 
     def publish_telemetry(self, readings):
-        self.client.publish(self.topics["telemetry"], telemetry_payload(readings).encode())
+        payload = telemetry_payload(readings)
+        if payload == "{}":
+            return
+        self.client.publish(self.topics["telemetry"], payload.encode())
 
     def acknowledge(self, command_id, executed, message):
         """Queues the ACK: it is published after check_msg returns, never inside the message callback.

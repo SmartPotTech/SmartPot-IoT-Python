@@ -47,6 +47,27 @@ def test_telemetry_skips_missing_sensors_and_rounds():
     assert payload == {"temperature": 23.5, "ph": 6.12, "tds": 813}
 
 
+def test_telemetry_omits_non_finite_and_out_of_range_values():
+    payload = json.loads(telemetry_payload({
+        "temperature": float("nan"),
+        "humidity": float("inf"),
+        "brightness": -1.0,
+        "ph": 15.0,
+        "tds": True,
+        "atmosphere": 250.0,
+        "soilMoisture": 48.24,
+    }))
+    assert payload == {"soilMoisture": 48.2}
+
+
+def test_publish_telemetry_skips_empty_payload():
+    smartpot = client()
+    smartpot.connect()
+    published_before = len(smartpot.client.published)
+    smartpot.publish_telemetry({"ph": float("nan"), "temperature": -99.0})
+    assert len(smartpot.client.published) == published_before
+
+
 def test_whole_number_telemetry_fields_are_json_integers():
     raw = telemetry_payload({"brightness": 1851.4, "tds": 812.7})
     payload = json.loads(raw)
